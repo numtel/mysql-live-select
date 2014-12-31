@@ -1,0 +1,18 @@
+{
+  "name": "mysql-live-select",
+  "version": "0.0.1",
+  "description": "Live updating MySQL SELECT statements",
+  "main": "index.js",
+  "scripts": {
+    "test": "nodeunit --reporter=minimal test"
+  },
+  "keywords": [
+    "mysql",
+    "binlog",
+    "select",
+    "live",
+    "update"
+  ],
+  "author": "Ben Green <ben@latenightsketches.com> (http://github.com/numtel)",
+  "license": "MIT"
+}
