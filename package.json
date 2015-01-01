@@ -2,7 +2,8 @@
   "name": "mysql-live-select",
   "version": "0.0.1",
   "description": "Live updating MySQL SELECT statements",
-  "main": "index.js",
+  "main": "lib/LiveMysql.js",
+  "repository": "https://github.com/numtel/mysql-live-select",
   "scripts": {
     "test": "nodeunit --reporter=minimal test"
   },
@@ -14,5 +15,8 @@
     "update"
   ],
   "author": "Ben Green <ben@latenightsketches.com> (http://github.com/numtel)",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "mysql": "^2.5.4"
+  }
 }
