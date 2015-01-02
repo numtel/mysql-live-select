@@ -2,4 +2,4 @@
 *.swp
 *.swo
 .npm
-node_modules
+node_modules/mysql
