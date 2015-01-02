@@ -6,16 +6,12 @@ Built using the [`zongji` Binlog Tailer](https://github.com/nevill/zongji) and [
 
 ## *Under Construction*
 
-This package is yet completed. In order to test it, please use the following command sequence as a guide:
+This package is not yet completed. In order to test it, you must clone the repo. Please use the following command sequence as a guide:
 
 ```bash
 $ git clone https://github.com/numtel/mysql-live-select.git
 $ cd mysql-live-select
 $ npm install
-$ cd node_modules
-# Updated ZongJi module not yet available on NPM, clone repo instead:
-$ git clone https://github.com/nevill/zongji.git
-$ cd ..
 # To use example as-is, copy example data into MySQL
 $ mysql < example.sql
 # Configure example to match your MySQL settings
@@ -25,10 +21,6 @@ $ vim example.js
 $ node example.js
 ```
 
-Coming soon:
-
-* Automated tests
-
 ## Installation
 
 * Enable MySQL binlog in `my.cnf`, restart MySQL server after making the changes.
@@ -36,13 +28,11 @@ Coming soon:
   ```
   # binlog config
   server-id        = 1
+  binlog_format    = row
   log_bin          = /usr/local/var/log/mysql/mysql-bin.log
   binlog_do_db     = employees   # optional
   expire_logs_days = 10          # optional
   max_binlog_size  = 100M        # optional
-
-  # Very important if you want to receive write, update and delete row events
-  binlog_format    = row
   ```
 * Create an account with replication privileges:
 
@@ -67,21 +57,23 @@ Setting | Type | Description
 
 ```javascript
 // Example:
-var table = 'my_table';
+var liveConnection = new LiveMysql(settings);
+var table = 'players';
 var id = 11;
 
-liveMysqlInstance.select(function(esc, escId){
+liveConnection.select(function(esc, escId){
   return (
     'select * from ' + escId(table) +
     'where `id`=' + esc(id)
   );
-}, [
+}, [ {
   table: table,
   condition: function(row, newRow){ return row.id === id; }
-]).on('update', function(data){
+} ]).on('update', function(data){
   console.log(data);
 });
 ```
+See [`example.js`](example.js) for full source...
 
 
 ### LiveMysql.prototype.select(query, triggers)

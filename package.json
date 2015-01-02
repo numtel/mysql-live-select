@@ -18,5 +18,8 @@
   "license": "MIT",
   "dependencies": {
     "mysql": "^2.5.4"
+  },
+  "devDependencies": {
+    "nodeunit": "^0.9.0"
   }
 }

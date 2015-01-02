@@ -7,26 +7,21 @@ var settings = {
   database    : 'leaderboard',
   serverId    : 34,
   minInterval : 200
-  // debug: true
 };
 
 var liveConnection = new LiveMysql(settings);
-// var result = liveConnection.select(
-//   'select * from players',
-//   [
-//     { table: 'players' }
-//   ]
-// );
-// result.on('update', function(event){
-//   // do something to update the client
-//   console.log(event);
-// });
+var table = 'players';
+var id = 11;
 
-liveConnection.select('select score from players where id=11', [
-  {
-    table: 'players',
-    condition: function(row, newRow){ return row.id === 11; }
-  }
-]).on('update', function(event){
-  console.log(event);
+liveConnection.select(function(esc, escId){
+  return (
+    'select * from ' + escId(table) +
+    'where `id`=' + esc(id)
+  );
+}, [ {
+  table: table,
+  condition: function(row, newRow){ return row.id === id; }
+} ]).on('update', function(data){
+  console.log(data);
 });
+
