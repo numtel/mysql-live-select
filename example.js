@@ -1,3 +1,5 @@
+/* mysql-live-select, MIT License ben@latenightsketches.com
+   example.js - Use mysql < example.sql to get started */
 var LiveMysql = require('./');
 
 var settings = {

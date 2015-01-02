@@ -4,24 +4,12 @@ NPM Package to provide events when a MySQL select statement result set changes.
 
 Built using the [`zongji` Binlog Tailer](https://github.com/nevill/zongji) and [`node-mysql`](https://github.com/felixge/node-mysql) projects.
 
-## *Under Construction*
-
-This package is not yet completed. In order to test it, you must clone the repo. Please use the following command sequence as a guide:
-
-```bash
-$ git clone https://github.com/numtel/mysql-live-select.git
-$ cd mysql-live-select
-$ npm install
-# To use example as-is, copy example data into MySQL
-$ mysql < example.sql
-# Configure example to match your MySQL settings
-# (Be sure to also to enable the binary log, as described in next section)
-$ vim example.js
-# Run example
-$ node example.js
-```
-
 ## Installation
+
+* Add the package to your project:
+  ```bash
+  $ npm install mysql-live-select
+  ```
 
 * Enable MySQL binlog in `my.cnf`, restart MySQL server after making the changes.
 
