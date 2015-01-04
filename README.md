@@ -36,7 +36,7 @@ The `LiveMysql` constructor makes 3 connections to your MySQL database:
 * Replication slave connection
 * `information_schema` connection for column information
 
-One argument, an object defining the settings. In addition the [`node-mysql` connection settings](#...), the following settings are available:
+One argument, an object defining the settings. In addition to the [`node-mysql` connection settings](https://github.com/felixge/node-mysql#connection-options), the following settings are available:
 
 Setting | Type | Description
 --------|------|------------------------------
