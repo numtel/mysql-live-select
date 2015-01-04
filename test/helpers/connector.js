@@ -12,6 +12,15 @@ function Connector(settings){
   delete settings.database;
   self.conn = new LiveMysql(settings);
   self.ready = false;
+
+  // Log all queries
+  self.queries = [];
+  var origQueryMethod = self.conn.db.query;
+  self.conn.db.query = function(query){
+    self.queries.push(query);
+    return origQueryMethod.apply(this, arguments);
+  }
+
   var escId = self.conn.db.escapeId;
   var esc = self.conn.db.escape.bind(self.conn.db);
 
@@ -21,13 +30,13 @@ function Connector(settings){
     'USE ' + escId(self.database),
   ], function(results){
     self.ready = true;
-    self.emit('ready', self.conn, esc, escId);
+    self.emit('ready', self.conn, esc, escId, self.queries);
   });
 
   setTimeout(function(){
     self.on('newListener', function(event, listener){
       if(event === 'ready'){
-        if(self.ready) listener(self.conn, esc, escId);
+        if(self.ready) listener(self.conn, esc, escId, self.queries);
       }
     });
   }, 1);
