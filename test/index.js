@@ -37,6 +37,16 @@ module.exports = {
                 test.equal(queries.length, 3);
                 conn.db.query('DELETE FROM ' + escId(table));
               }
+            }).on('added', function(row, index){
+              test.equal(index, 0);
+              test.equal(row.col, 10);
+            }).on('changed', function(row, newRow, index){
+              test.equal(index, 0);
+              test.equal(row.col, 10);
+              test.equal(newRow.col, 15);
+            }).on('removed', function(row, index){
+              test.equal(index, 0);
+              test.equal(row.col, 15);
             });
 
             querySequence(conn.db, [
