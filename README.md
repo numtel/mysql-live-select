@@ -41,7 +41,8 @@ One argument, an object defining the settings. In addition the [`node-mysql` con
 Setting | Type | Description
 --------|------|------------------------------
 `serverId`  | `integer` | [Unique number (1 - 2<sup>32</sup>)](http://dev.mysql.com/doc/refman/5.0/en/replication-options.html#option_mysqld_server-id) to identify this replication slave instance. Must be specified if running more than one instance.<br>**Default:** `1`
-`minInterval` | `integer` | Pass a number of milliseconds to use as the minimum between result set updates. Omit to refresh results on every update.
+`minInterval` | `integer` | Pass a number of milliseconds to use as the minimum between result set updates. Omit to refresh results on every update. May be changed at runtime.
+`skipDiff` | `boolean` | If `true`, the `added`, `changed`, and `removed` events will not be emitted. May be changed at runtime.<br>**Default:** `false`
 
 ```javascript
 // Example:
@@ -71,7 +72,7 @@ Argument | Type | Description
 `query`  | `string` or `function` | `SELECT` SQL statement. See note below about passing function.
 `triggers` | `[object]` | Array of objects defining which row changes to update result set
 
-Returns `LiveMysqlSelect` object which inherits from [`EventEmitter`](http://nodejs.org/api/events.html), providing `update` and `error` events.
+Returns `LiveMysqlSelect` object
 
 #### Function as `query`
 
@@ -98,6 +99,33 @@ Argument Name | Description
 `newRow`      | New row data (only available on `UPDATE` queries)
 
 Return `true` when the row data meets the condition to update the result set.
+
+## LiveMysqlSelect object
+
+Each call to the `select()` method on a LiveMysql object, returns a `LiveMysqlSelect` object with the following methods:
+
+Method Name | Arguments | Description
+------------|-----------|-----------------------
+`on`, `addListener` | `event`, `handler` | Add an event handler to the result set. See the following section for a list of the available event names.
+`update`    | `callback` | Update the result set. Callback function accepts `error, rows` arguments. Events will be emitted.
+
+As well as all of the other methods available on [`EventEmitter`](http://nodejs.org/api/events.html)...
+
+### Available Events
+
+Event Name | Arguments | Description
+-----------|-----------|---------------------------
+`update` | `rows` | Single argument contains complete result set array. Called before `added`, `changed`, and `removed` events.
+`added` | `row`, `index` | Row added to result set at index
+`changed` | `row`, `newRow`, `index` | Row contents mutated at index
+`removed` | `row`, `index` | Row removed at index
+`error` | `error` | Unhandled errors will be thrown
+
+## Running Tests
+
+Tests must be run with a properly configured MySQL server. Configure test settings in `test/settings.mysql.js`.
+
+Execute `nodeunit` using the `npm test` command.
 
 ## License
 

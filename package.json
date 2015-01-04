@@ -1,6 +1,6 @@
 {
   "name": "mysql-live-select",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Live updating MySQL SELECT statements",
   "main": "lib/LiveMysql.js",
   "repository": "https://github.com/numtel/mysql-live-select",

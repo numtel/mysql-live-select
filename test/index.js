@@ -8,7 +8,9 @@ var server = new Connector(settings);
 
 module.exports = {
   basic: function(test){
-    var table = 'simple';
+    var table = 'basic';
+    //  *  Test that all events emit with correct arguments
+    // [1] Test that duplicate queries are cached
     server.on('ready', function(conn, esc, escId, queries){
       querySequence(conn.db, [
         'DROP TABLE IF EXISTS ' + escId(table),
@@ -24,15 +26,16 @@ module.exports = {
         } ];
 
         conn.select(query, triggers).on('update', function(data){
-          if(data[0].col === 10){
+          // After initial update
+          if(data.length > 0 && data[0].col === 10){
             // Second select instance to check resultsBuffer
             conn.select(query, triggers).on('update', function(data){
-              if(data[0].col === 15){
-                // Test in LiveMysqlSelect created later,
+              if(data.length > 0 && data[0].col === 15){
+                // [1] Test in LiveMysqlSelect created later,
                 // Ensure only First select, update, second select occurred
                 // i.e. No duplicate selects, resultsBuffer working
                 test.equal(queries.length, 3);
-                test.done();
+                conn.db.query('DELETE FROM ' + escId(table));
               }
             });
 
@@ -43,8 +46,60 @@ module.exports = {
               // ...
             });
           }
+        }).on('added', function(row, index){
+          test.equal(index, 0);
+          test.equal(row.col, 10);
+        }).on('changed', function(row, newRow, index){
+          test.equal(index, 0);
+          test.equal(row.col, 10);
+          test.equal(newRow.col, 15);
+        }).on('removed', function(row, index){
+          test.equal(index, 0);
+          test.equal(row.col, 15);
+          test.done();
         });
 
+      });
+    });
+  },
+  skipDiff: function(test){
+    var table = 'skip_diff';
+    server.on('ready', function(conn, esc, escId, queries){
+      querySequence(conn.db, [
+        'DROP TABLE IF EXISTS ' + escId(table),
+        'CREATE TABLE ' + escId(table) + ' (col INT UNSIGNED)',
+        'INSERT INTO ' + escId(table) + ' (col) VALUES (10)',
+      ], function(results){
+        var error = function(){
+          throw new Error('diff events should not be called');
+        };
+
+        conn.settings.skipDiff = true;
+        conn.select('SELECT * FROM ' + escId(table), [ {
+          table: table,
+          database: server.database
+        } ]).on('update', function(rows){
+          if(rows.length > 0 && rows[0].col === 10){
+            test.ok(true);
+          }else if(rows.length > 0 && rows[0].col === 15){
+            conn.db.query('DELETE FROM ' + escId(table));
+          }else if(rows.length === 0){
+            // Give time, just in case the `removed` event comes in
+            setTimeout(function(){
+              test.done();
+            }, 100);
+          }
+        })
+        .on('added', error)
+        .on('changed', error)
+        .on('removed', error);
+
+        querySequence(conn.db, [
+          'UPDATE ' + escId(table) +
+          ' SET `col` = 15'
+        ], function(results){
+          // ...
+        });
       });
     });
   },
