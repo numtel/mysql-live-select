@@ -4,6 +4,8 @@ NPM Package to provide events when a MySQL select statement result set changes.
 
 Built using the [`zongji` Binlog Tailer](https://github.com/nevill/zongji) and [`node-mysql`](https://github.com/felixge/node-mysql) projects.
 
+* [Example Application using Express, SockJS and React](https://github.com/numtel/reactive-mysql-example)
+
 ## Installation
 
 * Add the package to your project:
