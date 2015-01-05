@@ -114,6 +114,25 @@ module.exports = {
     });
   },
   error_no_db_selected: function(test){
+    server.on('ready', function(conn, esc, escId, queries){
+
+      test.throws(function(){
+        conn.select('SELECT 1+1', [ { table: 'fake_table' } ]);
+      }, /no database selected on trigger/);
+
+      test.throws(function(){
+        conn.select('SELECT 1+1');
+      }, /triggers array required/);
+
+      test.throws(function(){
+        conn.select('SELECT 1+1', []);
+      }, /triggers array required/);
+
+      test.done();
+
+    });
+  },
+  error_invalid_query: function(test){
     var table = 'error_no_db';
     server.on('ready', function(conn, esc, escId, queries){
       querySequence(conn.db, [
@@ -122,20 +141,14 @@ module.exports = {
         'INSERT INTO ' + escId(table) + ' (col) VALUES (10)',
       ], function(results){
 
-        conn.select('SELECT * FROM ' + escId(table), [ {
-          table: table
+        conn.select('SELECT notcol FROM ' + escId(table), [ {
+          table: table,
+          database: server.database
         } ]).on('error', function(error){
-          test.equal(error.toString(),
-            'Error: no database selected on trigger');
+          test.ok(error.toString().match(/ER_BAD_FIELD_ERROR/));
           test.done();
         });
 
-        querySequence(conn.db, [
-          'UPDATE ' + escId(table) +
-          ' SET `col` = 15'
-        ], function(results){
-          // ...
-        });
       });
     });
   }
