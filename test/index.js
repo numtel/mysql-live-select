@@ -47,6 +47,23 @@ module.exports = {
             }).on('removed', function(row, index){
               test.equal(index, 0);
               test.equal(row.col, 15);
+            }).on('diff', function(diff){
+              // Only one row will change at once
+              test.equal(diff.length, 1);
+              // Index will always be 0, the first item
+              test.equal(diff[0][diff[0].length - 1], 0);
+              switch(diff[0][0]){
+                case 'added':
+                  test.equal(diff[0][1].col, 10);
+                  break;
+                case 'changed':
+                  test.equal(diff[0][1].col, 10);
+                  test.equal(diff[0][2].col, 15);
+                  break;
+                case 'added':
+                  test.equal(diff[0][1].col, 15);
+                  break;
+              }
             });
 
             querySequence(conn.db, [

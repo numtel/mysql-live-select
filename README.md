@@ -5,6 +5,7 @@ NPM Package to provide events when a MySQL select statement result set changes.
 Built using the [`zongji` Binlog Tailer](https://github.com/nevill/zongji) and [`node-mysql`](https://github.com/felixge/node-mysql) projects.
 
 * [Example Application using Express, SockJS and React](https://github.com/numtel/reactive-mysql-example)
+* [Meteor package for reactive MySQL](https://github.com/numtel/meteor-mysql)
 
 ## Installation
 
@@ -121,6 +122,7 @@ Event Name | Arguments | Description
 `added` | `row`, `index` | Row added to result set at index
 `changed` | `row`, `newRow`, `index` | Row contents mutated at index
 `removed` | `row`, `index` | Row removed at index
+`diff` | `diff` | Aggregation of `added`, `changed`, `removed` events for current event into a single array for easier handling of multiple changes
 `error` | `error` | Unhandled errors will be thrown
 
 ## Running Tests
