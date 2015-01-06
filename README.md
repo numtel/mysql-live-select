@@ -111,6 +111,8 @@ Method Name | Arguments | Description
 ------------|-----------|-----------------------
 `on`, `addListener` | `event`, `handler` | Add an event handler to the result set. See the following section for a list of the available event names.
 `update`    | `callback` | Update the result set. Callback function accepts `error, rows` arguments. Events will be emitted.
+`stop`      | *None* | Stop receiving updates
+`active`    | *None* | Return `true` if ready to recieve updates, `false` if `stop()` method has been called.
 
 As well as all of the other methods available on [`EventEmitter`](http://nodejs.org/api/events.html)...
 

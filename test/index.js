@@ -113,13 +113,15 @@ module.exports = {
           }else if(rows.length === 0){
             // Give time, just in case the `removed` event comes in
             setTimeout(function(){
+              conn.settings.skipDiff = false;
               test.done();
             }, 100);
           }
         })
         .on('added', error)
         .on('changed', error)
-        .on('removed', error);
+        .on('removed', error)
+        .on('diff', error);
 
         querySequence(conn.db, [
           'UPDATE ' + escId(table) +
@@ -130,6 +132,43 @@ module.exports = {
       });
     });
   },
+  stopAndActive: function(test){
+    var table = 'stop_active';
+    server.on('ready', function(conn, esc, escId, queries){
+      querySequence(conn.db, [
+        'DROP TABLE IF EXISTS ' + escId(table),
+        'CREATE TABLE ' + escId(table) + ' (col INT UNSIGNED)',
+        'INSERT INTO ' + escId(table) + ' (col) VALUES (10)',
+      ], function(results){
+        conn.select('SELECT * FROM ' + escId(table), [ {
+          table: table,
+          database: server.database
+        } ]).on('update', function(rows){
+          if(rows.length > 0 && rows[0].col === 10){
+            test.ok(true);
+          }else if(rows.length > 0 && rows[0].col === 15){
+            test.ok(this.active());
+            this.stop();
+            test.ok(!this.active());
+            conn.db.query('DELETE FROM ' + escId(table));
+            setTimeout(function(){
+              test.done();
+            }, 100);
+          }
+        }).on('removed', function(row, index){
+          throw new Error('should not be called');
+        });
+
+        querySequence(conn.db, [
+          'UPDATE ' + escId(table) +
+          ' SET `col` = 15'
+        ], function(results){
+          // ...
+        });
+      });
+    });
+  },
+
   error_no_db_selected: function(test){
     server.on('ready', function(conn, esc, escId, queries){
 
