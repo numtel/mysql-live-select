@@ -5,6 +5,8 @@ ZongJi (踪迹) is pronounced as `zōng jì` in Chinese.
 
 This package is a "pure JS" implementation based on [`node-mysql`](https://github.com/felixge/node-mysql). Since v0.2.0, The native part (which was written in C++) has been dropped.
 
+This package has been tested with MySQL server 5.5.40 and 5.6.19. All MySQL server versions >= 5.1.15 are supported.
+
 ## Quick Start
 
 ```javascript
@@ -106,6 +108,7 @@ Name   | Description
 * :star2: [All types allowed by `node-mysql`](https://github.com/felixge/node-mysql#type-casting) are supported by this package.
 * :speak_no_evil: While 64-bit integers in MySQL (`BIGINT` type) allow values in the range of 2<sup>64</sup> (± ½ × 2<sup>64</sup> for signed values), Javascript's internal storage of numbers limits values to 2<sup>53</sup>, making the allowed range of `BIGINT` fields only `-9007199254740992` to `9007199254740992`. Unsigned 64-bit integers must also not exceed `9007199254740992`.
 * :point_right: `TRUNCATE` statement does not cause corresponding `DeleteRows` event. Use unqualified `DELETE FROM` for same effect.
+* When using fractional seconds with `DATETIME` and `TIMESTAMP` data types in MySQL > 5.6.4, only millisecond precision is available due to the limit of Javascript's `Date` object.
 
 ## Run Tests
 
@@ -124,6 +127,7 @@ I learnt many things from following resources while making ZongJi.
 * http://dev.mysql.com/doc/internals/en/replication-protocol.html
 * http://www.cs.wichita.edu/~chang/lecture/cs742/program/how-mysql-c-api.html
 * https://github.com/jeremycole/mysql_binlog (Ruby implemenation of MySQL binlog parser)
+* http://dev.mysql.com/doc/internals/en/date-and-time-data-type-representation.html
 
 ## License
 MIT
