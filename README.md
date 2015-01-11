@@ -7,11 +7,7 @@ Built using the [`zongji` Binlog Tailer](https://github.com/nevill/zongji) and [
 * [Example Application using Express, SockJS and React](https://github.com/numtel/reactive-mysql-example)
 * [Meteor package for reactive MySQL](https://github.com/numtel/meteor-mysql)
 
-## Under construction
-
-This package has only been tested to work in MySQL 5.5.40.
-
-Support for MySQL 5.6 is currently underway.
+This package has been tested to work in MySQL 5.5.40 and 5.6.19. Expected support is all MySQL server version >= 5.1.15.
 
 ## Installation
 

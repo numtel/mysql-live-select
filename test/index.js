@@ -189,14 +189,12 @@ module.exports = {
     });
   },
   error_invalid_query: function(test){
-    var table = 'error_no_db';
+    var table = 'error_invalid_query';
     server.on('ready', function(conn, esc, escId, queries){
       querySequence(conn.db, [
         'DROP TABLE IF EXISTS ' + escId(table),
         'CREATE TABLE ' + escId(table) + ' (col INT UNSIGNED)',
-        'INSERT INTO ' + escId(table) + ' (col) VALUES (10)',
       ], function(results){
-
         conn.select('SELECT notcol FROM ' + escId(table), [ {
           table: table,
           database: server.database
