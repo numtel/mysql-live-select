@@ -7,6 +7,14 @@ var Connector = require('./helpers/connector');
 var server = new Connector(settings);
 
 module.exports = {
+  setUp: function(done){
+    server.testCount++;
+    done();
+  },
+  tearDown: function(done){
+    server.closeIfInactive(1000);
+    done();
+  },
   basic: function(test){
     var table = 'basic';
     //  *  Test that all events emit with correct arguments

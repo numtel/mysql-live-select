@@ -12,6 +12,7 @@ function Connector(settings){
   delete settings.database;
   self.conn = new LiveMysql(settings);
   self.ready = false;
+  self.testCount = 0;
 
   // Log all queries
   self.queries = [];
@@ -44,5 +45,15 @@ function Connector(settings){
 };
 
 util.inherits(Connector, EventEmitter);
+
+Connector.prototype.closeIfInactive = function(interval){
+  var self = this;
+  var startCount = self.testCount;
+  setTimeout(function(){
+    if(startCount === self.testCount){
+      self.conn.end();
+    }
+  }, interval);
+};
 
 module.exports = Connector;
