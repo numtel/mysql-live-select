@@ -7,6 +7,7 @@ class RowTrigger extends EventEmitter {
   constructor(parent, table, payloadColumns) {
     this.table = table;
     this.payloadColumns = payloadColumns;
+    this.ready = false;
 
     var { payloadColumnBuffer, conn, channel } = parent;
 
@@ -59,6 +60,8 @@ class RowTrigger extends EventEmitter {
         FOR EACH ROW EXECUTE PROCEDURE ${triggerName}()`
     ], (error, results) => {
       if(error) return this.emit('error', error);
+      this.ready = true;
+      this.emit('ready', results);
     });
 
   }

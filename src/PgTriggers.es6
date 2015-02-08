@@ -11,6 +11,8 @@ class PgTriggers extends EventEmitter {
     this.payloadColumnBuffer = {};
     this.channel = channel;
 
+    this.setMaxListeners(0); // Allow unlimited listeners
+
     conn.query(`LISTEN "${channel}"`, function(error, result) {
       if(error) throw error;
     });

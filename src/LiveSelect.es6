@@ -10,10 +10,10 @@ class LiveSelect extends EventEmitter {
     this.query = query;
     this.triggers = triggers;
     this.conn = conn;
+    this.data = null;
+    this.ready = false;
 
-    this.throttledRefresh = _.debounce(this.refresh, 1000, {
-      leading: true
-    });
+    this.throttledRefresh = _.debounce(this.refresh, 1000, { leading: true });
 
     this.triggerHandlers = _.map(triggers, (handler, table) => 
       parent.createTrigger(table, getFunctionArgumentNames(handler)));
@@ -27,6 +27,14 @@ class LiveSelect extends EventEmitter {
         var argVals = args.map(arg => payload[arg]);
         if(validator.apply(this, argVals)) this.throttledRefresh();
       });
+
+      handler.on('ready', (results) => {
+        // Check if all handlers are ready
+        if(this.triggerHandlers.filter(handler => !handler.ready).length === 0){
+          this.ready = true;
+          this.emit('ready', results);
+        }
+      });
     });
 
     // Grab initial results
@@ -35,6 +43,7 @@ class LiveSelect extends EventEmitter {
   refresh() {
     this.conn.query(this.query, (error, results) => {
       if(error) return this.emit('error', error);
+      this.data = results.rows;
       this.emit('update', results.rows);
     });
   }

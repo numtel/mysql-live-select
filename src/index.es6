@@ -11,18 +11,61 @@ var conn = anyDB.createConnection(CONN_STR);
 // Each connection should run on its own unique channel (2nd arg)
 var triggers = new PgTriggers(conn, 'test');
 
-// TODO: Perform joined query to figure out how to build efficient trigger
-//        lambda, somehow testing if column value is in current result set?
-var mySelect = triggers.select(
-  // Specify query string
-  `SELECT * FROM test_pub WHERE last_name = 'Palmer'`,
-  // Specify trigger lambdas for each table to watch
-  // Arguments are grabbed from row changes and placed in NOTIFY payload
-  // Return boolean whether or not to refresh the query
-  { test_pub: (last_name) => last_name === 'Palmer' });
 
-mySelect.on('update', function(results) {
-  console.log(results);
+function liveClassScores(triggers, classId, onUpdate) {
+  if(typeof triggers !== 'object' || typeof triggers.select !== 'function')
+    throw new Error('first argument must be trigger manager object');
+  if(typeof classId !== 'number' || !Number.isInteger(classId))
+    throw new Error('classId must be integer');
+  if(typeof onUpdate !== 'function')
+    throw new Error('onUpdate callback must be defined');
+
+  // Triggers require caches of active primary keys
+  var assignmentIds = [], studentIds = [];
+
+  // Prepare supporting query to main query
+  var classAssignments = triggers.select(
+    `SELECT id FROM assignments WHERE class_id = ${classId}`,
+    { assignments: (class_id) => class_id === classId });
+
+  classAssignments.on('update', function(results) {
+    assignmentIds = results.map(row => row.id);
+  });
+
+  classAssignments.on('ready', function() {
+    // Perform main query when supporting query is installed
+    var mySelect = triggers.select(`
+      SELECT
+        students.name AS student_name,
+        students.id AS student_id,
+        assignments.name,
+        assignments.value,
+        scores.score
+      FROM
+        scores
+      INNER JOIN assignments ON
+        (assignments.id = scores.assignment_id)
+      INNER JOIN students ON
+        (students.id = scores.student_id)
+      WHERE
+        assignments.class_id = ${classId}
+    `, {
+      assignments: (class_id) => class_id === classId,
+      students: (id) => studentIds.indexOf(id) !== -1,
+      scores: (assignment_id) => assignmentIds.indexOf(assignment_id) !== -1
+    });
+
+    mySelect.on('update', function(results) {
+      // Update student_id cache
+      studentIds = results.map(row => row.student_id);
+
+      onUpdate(results);
+    });
+  });
+};
+
+liveClassScores(triggers, 1, (results) => {
+  console.log(results)
 });
 
 
