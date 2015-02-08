@@ -10,7 +10,7 @@ class LiveSelect extends EventEmitter {
     this.query = query;
     this.triggers = triggers;
     this.conn = conn;
-    this.data = null;
+    this.data = [];
     this.ready = false;
 
     this.throttledRefresh = _.debounce(this.refresh, 1000, { leading: true });
@@ -19,13 +19,24 @@ class LiveSelect extends EventEmitter {
       parent.createTrigger(table, getFunctionArgumentNames(handler)));
 
     this.triggerHandlers.forEach((handler) => {
-      // TODO: Fix so that if both UPDATE NEW and UPDATE OLD triggers match,
-      //        the results are only updated one time
       handler.on('change', (payload) => {
         var validator = triggers[handler.table];
         var args = getFunctionArgumentNames(validator);
-        var argVals = args.map(arg => payload[arg]);
-        if(validator.apply(this, argVals)) this.throttledRefresh();
+        if(payload._op === 'UPDATE') {
+          // Update events contain both old and new values in payload
+          // using 'new_' and 'old_' prefixes on the column names
+          var argNewVals = args.map(arg => payload[`new_${arg}`]);
+          var argOldVals = args.map(arg => payload[`old_${arg}`]);
+
+          if(validator.apply(this, argNewVals) ||
+             validator.apply(this, argOldVals)){
+            this.throttledRefresh();
+          }
+        }else{
+          // Insert and Delete events do not have prefixed column names
+          var argVals = args.map(arg => payload[arg]);
+          if(validator.apply(this, argVals)) this.throttledRefresh();
+        }
       });
 
       handler.on('ready', (results) => {
@@ -43,8 +54,31 @@ class LiveSelect extends EventEmitter {
   refresh() {
     this.conn.query(this.query, (error, results) => {
       if(error) return this.emit('error', error);
-      this.data = results.rows;
-      this.emit('update', results.rows);
+      var rows = results.rows;
+
+      if(this.listeners('diff').length !== 0) {
+        var diff = [];
+        rows.forEach((row, index) => {
+          if(this.data.length - 1 < index){
+            diff.push(['added', row, index]);
+          }else if(JSON.stringify(this.data[index]) !== JSON.stringify(row)){
+            diff.push(['changed', this.data[index], row, index]);
+          }
+        });
+
+        if(this.data.length > rows.length){
+          for(var i = this.data.length - 1; i >= rows.length; i--){
+            diff.push(['removed', this.data[i], i]);
+          }
+        }
+        if(diff.length !== 0){
+          // Output all difference events in a single event
+          this.emit('diff', diff);
+        }
+      }
+
+      this.data = rows;
+      this.emit('update', rows);
     });
   }
 }

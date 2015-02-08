@@ -23,16 +23,24 @@ class RowTrigger extends EventEmitter {
     }
 
     // Update the trigger for this table on this channel
-    var payloadTpl =
-      `SELECT
+    var payloadTpl = `
+      SELECT
         '${table}'  AS _table,
         TG_OP       AS _op,
-        '$ROW$'     AS _which_row,
         ${payloadColumns.map(col => `$ROW$.${col}`).join(', ')}
       INTO row_data;
     `;
     var payloadNew = payloadTpl.replace(/\$ROW\$/g, 'NEW');
     var payloadOld = payloadTpl.replace(/\$ROW\$/g, 'OLD');
+    var payloadChanged = `
+      SELECT
+        '${table}'  AS _table,
+        TG_OP       AS _op,
+        ${payloadColumns.map(col => `NEW.${col} AS new_${col}`)
+          .concat(payloadColumns.map(col => `OLD.${col} AS old_${col}`))
+          .join(', ')}
+      INTO row_data;
+    `;
 
     var triggerName = `${channel}_${table}`;
 
@@ -41,15 +49,14 @@ class RowTrigger extends EventEmitter {
         DECLARE
           row_data RECORD;
         BEGIN
-          IF (TG_OP IN ('INSERT', 'UPDATE')) THEN
+          IF (TG_OP = 'INSERT') THEN
             ${payloadNew}
-            PERFORM pg_notify('${channel}', row_to_json(row_data)::TEXT);
-          END IF;
-          IF (TG_OP IN ('DELETE', 'UPDATE')) THEN
+          ELSIF (TG_OP  = 'DELETE') THEN
             ${payloadOld}
-            PERFORM pg_notify('${channel}', row_to_json(row_data)::TEXT);
+          ELSIF (TG_OP = 'UPDATE') THEN
+            ${payloadChanged}
           END IF;
-
+          PERFORM pg_notify('${channel}', row_to_json(row_data)::TEXT);
           RETURN NULL;
         END;
       $$ LANGUAGE plpgsql`,
