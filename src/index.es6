@@ -16,7 +16,7 @@ class liveClassScores extends EventEmitter {
   constructor(triggers, classId) {
     if(typeof triggers !== 'object' || typeof triggers.select !== 'function')
       throw new Error('first argument must be trigger manager object');
-    if(typeof classId !== 'number' || !Number.isInteger(classId))
+    if(typeof classId !== 'number')
       throw new Error('classId must be integer');
 
     // Triggers require caches of active primary keys
