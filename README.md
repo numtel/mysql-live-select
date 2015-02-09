@@ -37,7 +37,7 @@ This package has been tested to work in MySQL 5.5.40 and 5.6.19. Expected suppor
 
 The `LiveMysql` constructor makes 3 connections to your MySQL database:
 
-* Connection for executing `SELECT` queries
+* Connection for executing `SELECT` queries (exposed on instance as `db` property)
 * Replication slave connection
 * `information_schema` connection for column information
 
