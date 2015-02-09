@@ -2,6 +2,4 @@
 *.swp
 *.swo
 .npm
-node_modules/mysql
-node_modules/.bin
-node_modules/nodeunit
+node_modules
