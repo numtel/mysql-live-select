@@ -19,49 +19,30 @@ class liveClassScores extends EventEmitter {
     if(typeof classId !== 'number')
       throw new Error('classId must be integer');
 
-    // Triggers require caches of active primary keys
-    var assignmentIds = [], studentIds = [];
+    var mySelect = triggers.select(`
+      SELECT
+        students.name  AS student_name,
+        students.id    AS student_id,
+        assignments.id AS assignment_id,
+        assignments.name,
+        assignments.value,
+        scores.score
+      FROM
+        scores
+      INNER JOIN assignments ON
+        (assignments.id = scores.assignment_id)
+      INNER JOIN students ON
+        (students.id = scores.student_id)
+      WHERE
+        assignments.class_id = ${classId} AND scores.score > 10
+    `);
 
-    // Prepare supporting query to main query
-    var classAssignments = triggers.select(
-      `SELECT id FROM assignments WHERE class_id = ${classId}`,
-      { assignments: (class_id) => class_id === classId });
-
-    classAssignments.on('update', (results) => {
-      assignmentIds = results.map(row => row.id);
+    mySelect.on('update', (results) => {
+      this.emit('update', results);
     });
 
-    classAssignments.on('ready', () => {
-      // Perform main query when supporting query is installed
-      var mySelect = triggers.select(`
-        SELECT
-          students.name  AS student_name,
-          students.id    AS student_id,
-          assignments.id AS assignment_id,
-          assignments.name,
-          assignments.value,
-          scores.score
-        FROM
-          scores
-        INNER JOIN assignments ON
-          (assignments.id = scores.assignment_id)
-        INNER JOIN students ON
-          (students.id = scores.student_id)
-        WHERE
-          assignments.class_id = ${classId} AND scores.score > 10
-      `);
-
-      mySelect.on('update', (results) => {
-        // Update student_id cache
-        studentIds = results.map(row => row.student_id);
-
-        this.emit('update', results);
-      });
-
-      mySelect.on('diff', (diff) => {
-        console.log(diff);
-        this.emit('diff', diff);
-      });
+    mySelect.on('diff', (diff) => {
+      this.emit('diff', diff);
     });
   }
 }
@@ -69,7 +50,7 @@ class liveClassScores extends EventEmitter {
 var myClassScores = new liveClassScores(triggers, 1);
 
 myClassScores.on('update', (rows) => {
-  // console.log(rows)
+  console.log(rows);
 });
 
 process.on('SIGINT', function() {
