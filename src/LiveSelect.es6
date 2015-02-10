@@ -7,11 +7,10 @@ var getFunctionArgumentNames = require('./getFunctionArgumentNames');
 var querySequence = require('./querySequence');
 
 class LiveSelect extends EventEmitter {
-  constructor(parent, query, triggers) {
+  constructor(parent, query) {
     var { conn, channel } = parent;
 
     this.query = query;
-    this.triggers = triggers;
     this.conn = conn;
     this.data = [];
     this.ready = false;
@@ -20,13 +19,77 @@ class LiveSelect extends EventEmitter {
 
     this.throttledRefresh = _.debounce(this.refresh, 1000, { leading: true });
 
-    this.triggerHandlers = _.map(triggers, (handler, table) => 
-      parent.createTrigger(table, getFunctionArgumentNames(handler)));
+    // Create view for this query
+    this.conn.query(`CREATE OR REPLACE TEMP VIEW ${this.viewName} AS ${query}`,
+      (error, results) => {
+        if(error) return this.emit('error', error);
 
-    this.triggerHandlers.forEach((handler) => {
-      handler.on('change', (payload) => {
-        var validator = triggers[handler.table];
-        var args = getFunctionArgumentNames(validator);
+        // Generate triggers based on what we know
+        // about the view from the information schema.
+        var primary = `
+          CASE WHEN cc.column_name = vc.column_name THEN 1 ELSE 0 END
+        `;
+
+        var sql = `
+          SELECT
+            vc.*,
+            (${primary}) AS primary
+          FROM
+            information_schema.view_column_usage vc JOIN
+            information_schema.table_constraints tc ON
+              tc.table_catalog = vc.table_catalog AND
+              tc.table_schema = vc.table_schema AND
+              tc.table_name = vc.table_name AND
+              tc.constraint_type = 'PRIMARY KEY' JOIN
+            information_schema.constraint_column_usage cc ON
+              cc.table_catalog = tc.table_catalog AND
+              cc.table_schema = tc.table_schema AND
+              cc.table_name = tc.table_name AND
+              cc.constraint_name = tc.constraint_name
+          WHERE
+            view_name = '${this.viewName}'
+        `;
+
+        conn.query(sql, (error, result) => {
+          if(error) return this.emit('error', error);
+
+          var triggers     = {};
+          var primary_keys = {};
+
+          result.rows.forEach((row) => {
+            var table_name  = row.table_name;
+            var column_name = row.column_name;
+
+            if(!triggers[table_name]) {
+              triggers[table_name] = [];
+            }
+
+            if(row.primary) {
+              primary_keys[table_name] = column_name;
+            }
+
+            triggers[table_name].push(column_name);
+          });
+
+          this.triggers = _.map(triggers, (columns, table) => {
+            return {
+              handler   : parent.createTrigger(table, columns),
+              columns   : columns,
+              validator : (...values) => _.object(columns, values)
+            };
+          });
+
+          this.listen();
+        });
+
+        // Grab initial results
+        this.refresh(true);
+    });
+  }
+
+  listen() {
+    this.triggers.forEach((trigger) => {
+      trigger.handler.on('change', (payload) => {
         // Validator lambdas may return false to skip refresh,
         //  true to refresh entire result set, or
         //  {key:value} map denoting which rows to replace
@@ -34,42 +97,33 @@ class LiveSelect extends EventEmitter {
         if(payload._op === 'UPDATE') {
           // Update events contain both old and new values in payload
           // using 'new_' and 'old_' prefixes on the column names
-          var argNewVals = args.map(arg => payload[`new_${arg}`]);
-          var argOldVals = args.map(arg => payload[`old_${arg}`]);
+          var argNewVals = trigger.columns.map(arg => payload[`new_${arg}`]);
+          var argOldVals = trigger.columns.map(arg => payload[`old_${arg}`]);
 
-          refresh = validator.apply(this, argNewVals);
+          refresh = trigger.validator.apply(this, argNewVals);
           if(refresh === false) {
             // Try old values as well
-            refresh = validator.apply(this, argOldVals);
+            refresh = trigger.validator.apply(this, argOldVals);
           }
         }else{
           // Insert and Delete events do not have prefixed column names
-          var argVals = args.map(arg => payload[arg]);
-          refresh = validator.apply(this, argVals);
+          var argVals = trigger.columns.map(arg => payload[arg]);
+          refresh = trigger.validator.apply(this, argVals);
         }
 
         refresh && this.throttledRefresh(refresh);
       });
 
-      handler.on('ready', (results) => {
+      trigger.handler.on('ready', (results) => {
         // Check if all handlers are ready
-        if(this.triggerHandlers.filter(handler => !handler.ready).length === 0){
+        if(this.triggers.filter(trigger => !trigger.handler.ready).length === 0){
           this.ready = true;
           this.emit('ready', results);
         }
       });
     });
-
-    // Create view for this query
-    this.conn.query(`CREATE OR REPLACE TEMP VIEW ${this.viewName} AS ${query}`,
-      (error, results) => {
-        if(error) return this.emit('error', error);
-
-        // Grab initial results
-        this.refresh(true);
-    });
-
   }
+
   refresh(condition) {
     // Build WHERE clause if not refreshing entire result set
     var values, where;

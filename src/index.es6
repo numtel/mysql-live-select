@@ -48,16 +48,8 @@ class liveClassScores extends EventEmitter {
         INNER JOIN students ON
           (students.id = scores.student_id)
         WHERE
-          assignments.class_id = ${classId}
-      `, {
-        assignments: (class_id, id) =>
-          class_id === classId ? { assignment_id : id } : false,
-        students: (id) =>
-          studentIds.indexOf(id) !== -1 ? { student_id : id } : false,
-        scores: (assignment_id) =>
-          assignmentIds.indexOf(assignment_id) !== -1 ?
-            { assignment_id } : false
-      });
+          assignments.class_id = ${classId} AND scores.score > 10
+      `);
 
       mySelect.on('update', (results) => {
         // Update student_id cache
@@ -67,6 +59,7 @@ class liveClassScores extends EventEmitter {
       });
 
       mySelect.on('diff', (diff) => {
+        console.log(diff);
         this.emit('diff', diff);
       });
     });
@@ -76,9 +69,8 @@ class liveClassScores extends EventEmitter {
 var myClassScores = new liveClassScores(triggers, 1);
 
 myClassScores.on('update', (rows) => {
-  console.log(rows)
+  // console.log(rows)
 });
-
 
 process.on('SIGINT', function() {
   // Ctrl+C
@@ -88,6 +80,3 @@ process.on('SIGINT', function() {
     process.exit();
   });
 });
-
-
-
