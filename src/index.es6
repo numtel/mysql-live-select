@@ -35,8 +35,9 @@ class liveClassScores extends EventEmitter {
       // Perform main query when supporting query is installed
       var mySelect = triggers.select(`
         SELECT
-          students.name AS student_name,
-          students.id AS student_id,
+          students.name  AS student_name,
+          students.id    AS student_id,
+          assignments.id AS assignment_id,
           assignments.name,
           assignments.value,
           scores.score
@@ -49,9 +50,13 @@ class liveClassScores extends EventEmitter {
         WHERE
           assignments.class_id = ${classId}
       `, {
-        assignments: (class_id) => class_id === classId,
-        students: (id) => studentIds.indexOf(id) !== -1,
-        scores: (assignment_id) => assignmentIds.indexOf(assignment_id) !== -1
+        assignments: (class_id, id) =>
+          class_id === classId ? { assignment_id : id } : false,
+        students: (id) =>
+          studentIds.indexOf(id) !== -1 ? { student_id : id } : false,
+        scores: (assignment_id) =>
+          assignmentIds.indexOf(assignment_id) !== -1 ?
+            { assignment_id } : false
       });
 
       mySelect.on('update', (results) => {
@@ -70,8 +75,8 @@ class liveClassScores extends EventEmitter {
 
 var myClassScores = new liveClassScores(triggers, 1);
 
-myClassScores.on('diff', (diff) => {
-  console.log(diff)
+myClassScores.on('update', (rows) => {
+  console.log(rows)
 });
 
 
