@@ -42,6 +42,7 @@ class liveClassScores extends EventEmitter {
     });
 
     mySelect.on('diff', (diff) => {
+      console.log(diff);
       this.emit('diff', diff);
     });
   }
@@ -49,9 +50,9 @@ class liveClassScores extends EventEmitter {
 
 var myClassScores = new liveClassScores(triggers, 1);
 
-myClassScores.on('update', (rows) => {
-  console.log(rows);
-});
+// myClassScores.on('update', (rows) => {
+//   console.log(rows);
+// });
 
 process.on('SIGINT', function() {
   // Ctrl+C
