@@ -260,8 +260,8 @@ class LiveSelect extends EventEmitter {
         // check to see if anything has changed
         var hasDiff = false;
 
-        for(var col in this.data[id].row) {
-          if(this.data[id].row[col] !== row[col]) {
+        for(var col in this.data[id]) {
+          if(this.data[id][col] !== row[col]) {
             hasDiff = true;
             break;
           }
