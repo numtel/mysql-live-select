@@ -38,22 +38,10 @@ class LiveSelect extends EventEmitter {
         aliases[col.table][col.name] = col.alias;
       });
 
-      this.triggers = _.map(triggers, (columns, table) => {
-        return {
-          handler   : parent.createTrigger(table, columns),
-          columns   : columns,
-          validator : (row) => {
-            var tmpRow = {};
+      this.triggers = _.map(triggers,
+        (columns, table) => parent.createTrigger(table, columns));
 
-            _.forOwn(row, (value, column) => {
-              var alias = aliases[table][column];
-              tmpRow[alias] = value;
-            });
-
-            return tmpRow;
-          }
-        };
-      });
+      this.aliases = aliases;
 
       this.listen();
 
@@ -162,36 +150,40 @@ class LiveSelect extends EventEmitter {
 
   listen() {
     this.triggers.forEach((trigger) => {
-      trigger.handler.on('change', (payload) => {
+      trigger.on('change', (payload) => {
         // Update events contain both old and new values in payload
         // using 'new_' and 'old_' prefixes on the column names
         var argVals = {};
 
         if(payload._op === 'UPDATE') {
-          trigger.columns.forEach((col) => {
+          trigger.payloadColumns.forEach((col) => {
             if(payload[`new_${col}`] !== payload[`old_${col}`]) {
               argVals[col] = payload[`new_${col}`];
             }
           });
         }
         else {
-          trigger.columns.forEach((col) => {
+          trigger.payloadColumns.forEach((col) => {
             argVals[col] = payload[col];
           });
         }
 
-        // Validator lambdas return {key:value}
-        // map denoting which rows to replace
-        var refresh = trigger.validator.call(this, argVals);
+        // Generate a map denoting which rows to replace
+        var tmpRow = {};
 
-        if(!_.isEmpty(refresh)) {
-          this.throttledRefresh(refresh);
+        _.forOwn(argVals, (value, column) => {
+          var alias = this.aliases[trigger.table][column];
+          tmpRow[alias] = value;
+        });
+
+        if(!_.isEmpty(tmpRow)) {
+          this.throttledRefresh(tmpRow);
         }
       });
 
-      trigger.handler.on('ready', (results) => {
+      trigger.on('ready', (results) => {
         // Check if all handlers are ready
-        if(this.triggers.filter(trigger => !trigger.handler.ready).length === 0){
+        if(this.triggers.filter(trigger => !trigger.ready).length === 0){
           this.ready = true;
           this.emit('ready', results);
         }
