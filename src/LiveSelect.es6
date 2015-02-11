@@ -53,14 +53,6 @@ class LiveSelect extends EventEmitter {
   createView(name, query, callback) {
     var tmpName  = `${this.viewName}_tmp`;
 
-    var primary = `
-      CASE WHEN
-        cc.column_name = vc.column_name
-      THEN 1
-      ELSE 0
-      END
-    `;
-
     var columnUsageQuery = `
       SELECT
         vc.table_name,
