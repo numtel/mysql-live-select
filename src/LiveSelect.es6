@@ -10,7 +10,7 @@ class LiveSelect extends EventEmitter {
 
     this.query = query;
     this.conn = conn;
-    this.data = [];
+    this.data = {};
     this.ready = false;
 
     this.viewName = `${channel}_${murmurHash(query)}`;
@@ -199,64 +199,97 @@ class LiveSelect extends EventEmitter {
   }
 
   refresh(condition) {
-    // Build WHERE clause if not refreshing entire result set
-    var values, where;
-    if(condition !== true) {
-      var valueCount = 0;
-      values = _.values(condition);
-      where = 'WHERE ' +
-        _.keys(condition)
-          .map((key, index) => `${key} = $${index + 1}`)
-          .join(' AND ');
-    }else{
-      values = [];
-      where  = '';
-    }
-
-    this.conn.query(`SELECT * FROM ${this.viewName} ${where}`, values,
-      (error, results) => {
+    // If refreshing the entire result set,
+    // we don't need to run a separate ID query
+    if(condition === true) {
+      this.conn.query(`SELECT * FROM ${this.viewName}`, (error, result) => {
         if(error) return this.emit('error', error);
-        var rows;
-        if(condition !== true) {
-          // Do nothing if no change
-          if(results.rows.length === 0) return;
-          // Partial refresh, copy rows from current data
-          rows = this.data.slice();
-          _.forOwn(condition, (value, key) => {
-            // Only keep rows that do not match the condition value on key
-            rows = rows.filter(row => row[key] !== value);
-          });
-          // Append new data
-          rows = rows.concat(results.rows);
-        }else{
-          rows = results.rows;
+
+        var allIds = {};
+
+        result.rows.forEach((row, index) => {
+          var id = row._id;
+
+          allIds[id] = index;
+        });
+
+        this.update(result.rows, allIds);
+      });
+    }
+    else {
+      // Run a separate query to get all IDs and their indexes
+      this.conn.query(`SELECT _id FROM ${this.viewName}`, (error, result) => {
+        if(error) return this.emit('error', error);
+
+        var allIds = {};
+
+        result.rows.forEach((row, index) => {
+          var id = row._id;
+
+          allIds[id] = index;
+        });
+
+        var valueCount = 0;
+        var values     = _.values(condition);
+
+        // Build WHERE clause if not refreshing entire result set
+        var where = _.keys(condition)
+            .map((key, index) => `${key} = $${index + 1}`)
+            .join(' AND ');
+
+        var sql = `SELECT * FROM ${this.viewName} WHERE ${where}`;
+
+        this.conn.query(sql, values, (error, result) =>  {
+          if(error) return this.emit('error', error);
+
+          this.update(result.rows, allIds);
+        });
+      });
+    }
+  }
+
+  update(rows, allIds) {
+    var diff = [];
+
+    // Handle added/changed rows
+    rows.forEach((row) => {
+      var id = row._id;
+
+      if(this.data[id]) {
+        // If this row existed in the result set,
+        // check to see if anything has changed
+        var hasDiff = false;
+
+        for(var col in this.data[id].row) {
+          if(this.data[id].row[col] !== row[col]) {
+            hasDiff = true;
+            break;
+          }
         }
 
-        if(this.listeners('diff').length !== 0) {
-          var diff = [];
-          rows.forEach((row, index) => {
-            if(this.data.length - 1 < index){
-              diff.push(['added', row, index]);
-            }else if(JSON.stringify(this.data[index]) !== JSON.stringify(row)){
-              diff.push(['changed', this.data[index], row, index]);
-            }
-          });
-
-          if(this.data.length > rows.length){
-            for(var i = this.data.length - 1; i >= rows.length; i--){
-              diff.push(['removed', this.data[i], i]);
-            }
-          }
-          if(diff.length !== 0){
-            // Output all difference events in a single event
-            this.emit('diff', diff);
-          }
-        }
-
-        this.data = rows;
-        this.emit('update', rows);
+        hasDiff && diff.push(['changed', this.data[id], row]);
       }
-    );
+      else {
+        // Otherwise, it was added
+        diff.push(['added', row]);
+      }
+
+      this.data[id] = row;
+    });
+
+    // Check to see if there are any
+    // IDs that have been removed
+    _.forOwn(this.data, (row, id) => {
+      if(_.isUndefined(allIds[id])) {
+        diff.push(['removed', row]);
+        delete this.data[id];
+      }
+    });
+
+    if(diff.length !== 0){
+      // Output all difference events in a single event
+      this.emit('update', diff, this.data);
+    }
   }
 }
 

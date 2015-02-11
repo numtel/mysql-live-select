@@ -1,5 +1,6 @@
 var EventEmitter = require('events').EventEmitter;
 var anyDB        = require('any-db');
+var _            = require('lodash');
 
 var PgTriggers = require('./PgTriggers');
 
@@ -37,22 +38,17 @@ class liveClassScores extends EventEmitter {
         assignments.class_id = ${classId} AND scores.score > 10
     `);
 
-    mySelect.on('update', (results) => {
-      this.emit('update', results);
-    });
-
-    mySelect.on('diff', (diff) => {
-      console.log(diff);
-      this.emit('diff', diff);
+    mySelect.on('update', (results, allRows) => {
+      this.emit('update', results, allRows);
     });
   }
 }
 
 var myClassScores = new liveClassScores(triggers, 1);
 
-// myClassScores.on('update', (rows) => {
-//   console.log(rows);
-// });
+myClassScores.on('update', (diff, allRows) => {
+  console.log(diff, _.keys(allRows).length);
+});
 
 process.on('SIGINT', function() {
   // Ctrl+C
