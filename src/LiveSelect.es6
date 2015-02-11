@@ -180,6 +180,9 @@ class LiveSelect extends EventEmitter {
       }
     });
 
+    // TODO: remove columns that are not in the original
+    // query from the published rows. (Perhaps keeping _id?)
+    // https://git.focus-sis.com/beng/pg-notify-trigger/issues/1
     if(diff.length !== 0){
       // Output all difference events in a single event
       this.emit('update', diff, this.data);
