@@ -124,8 +124,7 @@ class LiveSelect extends EventEmitter {
           allIds[id] = index;
         });
 
-        var valueCount = 0;
-        var values     = _.values(condition);
+        var values = _.values(condition);
 
         // Build WHERE clause if not refreshing entire result set
         var where = _.keys(condition)
