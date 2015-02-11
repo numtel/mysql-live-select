@@ -103,58 +103,60 @@ class LiveSelect extends EventEmitter {
         view_name = $1
     `;
 
+    var sql = [
+      `CREATE OR REPLACE TEMP VIEW ${tmpName} AS ${query}`,
+      [tableUsageQuery, [tmpName]],
+      [columnUsageQuery, [tmpName]]
+    ];
+
     // Create a temporary view to figure out what columns will be used
-    this.conn.query(`CREATE OR REPLACE TEMP VIEW ${tmpName} AS ${query}`,
-      (error, results) => {
-        this.conn.query(tableUsageQuery, [tmpName], (error, result) => {
-          if(error) return callback.call(this, error);
+    querySequence(this.conn, sql, (error, result) => {
+      if(error) return callback.call(this, error);
 
-          var keys    = {};
-          var columns = [];
+      var tableUsage  = result[1].rows;
+      var columnUsage = result[2].rows;
 
-          result.rows.forEach((row, index) => {
-            keys[row.table_name] = row.column_name;
-          });
+      var keys    = {};
+      var columns = [];
 
-          this.conn.query(columnUsageQuery, [tmpName], (error, result) => {
-            if(error) return callback.call(this, error);
+      tableUsage.forEach((row, index) => {
+        keys[row.table_name] = row.column_name;
+      });
 
-            // This might not be completely reliable
-            var pattern = /SELECT([\s\S]+)FROM/;
+      // This might not be completely reliable
+      var pattern = /SELECT([\s\S]+)FROM/;
 
-            result.rows.forEach((row, index) => {
-              columns.push({
-                table : row.table_name,
-                name  : row.column_name,
-                alias : `_${row.table_name}_${row.column_name}`
-              });
-            });
-
-            var keySql = _.map(keys,
-              (value, key) => `CONCAT('${key}', ':', "${key}"."${value}")`);
-
-            var columnSql = _.map(columns,
-              (col, index) => `"${col.table}"."${col.name}" AS ${col.alias}`);
-
-            var viewQuery = query.replace(pattern, `
-              SELECT
-                CONCAT(${keySql.join(", '|', ")}) AS _id,
-                ${columnSql},
-                $1
-              FROM
-            `);
-
-            var sql = [
-              `DROP VIEW ${tmpName}`,
-              `CREATE OR REPLACE TEMP VIEW ${this.viewName} AS ${viewQuery}`
-            ];
-
-            querySequence(this.conn, sql, (error, result) =>  {
-              if(error) return callback.call(this, error);
-              return callback.call(this, null, {keys, columns});
-            });
-          });
+      columnUsage.forEach((row, index) => {
+        columns.push({
+          table : row.table_name,
+          name  : row.column_name,
+          alias : `_${row.table_name}_${row.column_name}`
         });
+      });
+
+      var keySql = _.map(keys,
+        (value, key) => `CONCAT('${key}', ':', "${key}"."${value}")`);
+
+      var columnSql = _.map(columns,
+        (col, index) => `"${col.table}"."${col.name}" AS ${col.alias}`);
+
+      var viewQuery = query.replace(pattern, `
+        SELECT
+          CONCAT(${keySql.join(", '|', ")}) AS _id,
+          ${columnSql},
+          $1
+        FROM
+      `);
+
+      var sql = [
+        `DROP VIEW ${tmpName}`,
+        `CREATE OR REPLACE TEMP VIEW ${this.viewName} AS ${viewQuery}`
+      ];
+
+      querySequence(this.conn, sql, (error, result) =>  {
+        if(error) return callback.call(this, error);
+        return callback.call(this, null, { keys, columns });
+      });
     });
   }
 
@@ -163,7 +165,6 @@ class LiveSelect extends EventEmitter {
       trigger.handler.on('change', (payload) => {
         // Update events contain both old and new values in payload
         // using 'new_' and 'old_' prefixes on the column names
-        var prefix  = payload._op === 'UPDATE' ? 'new_' : '';
         var argVals = {};
 
         if(payload._op === 'UPDATE') {
