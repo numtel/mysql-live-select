@@ -189,9 +189,10 @@ class LiveSelect extends EventEmitter {
 
 /**
  * Creates a view for a particular query that includes additional columns
- * @param  String   name     The name of the view
- * @param  String   query    The query
- * @param  Function callback A function that is called with information about the view
+ * @context LiveSelect instance
+ * @param   String   name     The name of the view
+ * @param   String   query    The query
+ * @param   Function callback A function that is called with information about the view
  */
 function createView(name, query, callback) {
   var tmpName  = `${this.viewName}_tmp`;
