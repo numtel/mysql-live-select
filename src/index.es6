@@ -37,24 +37,6 @@ class liveClassScores extends EventEmitter {
         assignments.class_id = $1 AND scores.score BETWEEN $2 AND $2 + 10
     `, [classId, score]);
 
-    console.log(`
-      SELECT
-        students.name  AS student_name,
-        students.id    AS student_id,
-        assignments.id AS assignment_id,
-        assignments.name,
-        assignments.value,
-        scores.score
-      FROM
-        scores
-      INNER JOIN assignments ON
-        (assignments.id = scores.assignment_id)
-      INNER JOIN students ON
-        (students.id = scores.student_id)
-      WHERE
-        assignments.class_id = ${classId} AND scores.score BETWEEN ${score} AND ${score} + 5
-    `);
-
     mySelect.on('update', (results, allRows) => {
       this.emit('update', results, allRows);
     });
