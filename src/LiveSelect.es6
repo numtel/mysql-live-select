@@ -3,22 +3,21 @@ var _            = require('lodash');
 
 var murmurHash = require('../dist/murmurhash3_gc');
 var querySequence = require('./querySequence');
+var cachedQueries = {};
 
 class LiveSelect extends EventEmitter {
-  constructor(parent, query) {
+  constructor(parent, query, params) {
     var { conn, channel } = parent;
 
-    this.query = query;
-    this.conn = conn;
-    this.data = {};
-    this.ready = false;
-
-    this.viewName = `${channel}_${murmurHash(query)}`;
+    this.params = params;
+    this.conn   = conn;
+    this.data   = {};
+    this.ready  = false;
 
     this.throttledRefresh = _.debounce(this.refresh, 1000, { leading: true });
 
     // Create view for this query
-    createView.call(this, this.viewName, query, (error, result) => {
+    addHelpers.call(this, query, (error, result) => {
       if(error) return this.emit('error', error);
 
       var triggers     = {};
@@ -42,6 +41,7 @@ class LiveSelect extends EventEmitter {
         (columns, table) => parent.createTrigger(table, columns));
 
       this.aliases = aliases;
+      this.query   = result.query;
 
       this.listen();
 
@@ -94,55 +94,38 @@ class LiveSelect extends EventEmitter {
   }
 
   refresh(condition) {
-    // If refreshing the entire result set,
-    // we don't need to run a separate ID query
     if(condition === true) {
-      this.conn.query(`SELECT * FROM ${this.viewName}`, (error, result) => {
-        if(error) return this.emit('error', error);
-
-        var allIds = {};
-
-        result.rows.forEach((row, index) => {
-          var id = row._id;
-
-          allIds[id] = index;
-        });
-
-        this.update(result.rows, allIds);
-      });
+      var where  = '';
+      var params = this.params;
     }
     else {
-      // Run a separate query to get all IDs and their indexes
-      this.conn.query(`SELECT _id FROM ${this.viewName}`, (error, result) => {
-        if(error) return this.emit('error', error);
+      var where  = [];
+      var params = _.clone(this.params);
 
-        var allIds = {};
-
-        result.rows.forEach((row, index) => {
-          var id = row._id;
-
-          allIds[id] = index;
-        });
-
-        var values = _.values(condition);
-
-        // Build WHERE clause if not refreshing entire result set
-        var where = _.keys(condition)
-            .map((key, index) => `${key} = $${index + 1}`)
-            .join(' AND ');
-
-        var sql = `SELECT * FROM ${this.viewName} WHERE ${where}`;
-
-        this.conn.query(sql, values, (error, result) =>  {
-          if(error) return this.emit('error', error);
-
-          this.update(result.rows, allIds);
-        });
+      // Build WHERE clause if not refreshing entire result set
+      _.forOwn(condition, (value, key) => {
+        params.push(value);
+        where.push(`${key} = $${params.length}`);
       });
+
+      where = `WHERE ${where.join(' AND ')}`;
     }
+
+    var sql = `
+      WITH tmp AS (${this.query})
+      SELECT *
+      FROM tmp
+      ${where}
+    `;
+
+    this.conn.query(sql, params, (error, result) =>  {
+      if(error) return this.emit('error', error);
+
+      this.update(result.rows);
+    });
   }
 
-  update(rows, allIds) {
+  update(rows) {
     var diff = [];
 
     // Handle added/changed rows
@@ -173,17 +156,38 @@ class LiveSelect extends EventEmitter {
 
     // Check to see if there are any
     // IDs that have been removed
-    _.forOwn(this.data, (row, id) => {
-      if(_.isUndefined(allIds[id])) {
-        diff.push(['removed', row]);
-        delete this.data[id];
-      }
-    });
-
     // TODO: remove columns that are not in the original
     // query from the published rows. (Perhaps keeping _id?)
     // https://git.focus-sis.com/beng/pg-notify-trigger/issues/1
-    if(diff.length !== 0){
+    var existingIds = _.keys(this.data);
+
+    if(existingIds.length) {
+      var sql = `
+        WITH tmp AS (${this.query})
+        SELECT *
+        FROM UNNEST(ARRAY['${_.keys(this.data).join("', '")}']) id
+        LEFT JOIN tmp ON tmp._id = id
+        WHERE tmp._id IS NULL
+      `;
+
+      // Get any IDs that have been removed
+      this.conn.query(sql, this.params, (error, result) => {
+        if(error) return this.emit('error', error);
+
+        result.rows.forEach((row) => {
+          var oldRow = this.data[row.id];
+
+          diff.push(['removed', oldRow]);
+          delete this.data[row.id];
+        });
+
+        if(diff.length !== 0){
+          // Output all difference events in a single event
+          this.emit('update', diff, this.data);
+        }
+      });
+    }
+    else if(diff.length !== 0){
       // Output all difference events in a single event
       this.emit('update', diff, this.data);
     }
@@ -191,14 +195,20 @@ class LiveSelect extends EventEmitter {
 }
 
 /**
- * Creates a view for a particular query that includes additional columns
+ * Adds helper columns to a query
  * @context LiveSelect instance
- * @param   String   name     The name of the view
  * @param   String   query    The query
  * @param   Function callback A function that is called with information about the view
  */
-function createView(name, query, callback) {
-  var tmpName  = `${this.viewName}_tmp`;
+function addHelpers(query, callback) {
+  var hash = murmurHash(query);
+
+  // If this query was cached before, reuse it
+  if(cachedQueries[hash]) {
+    return callback(null, cachedQueries[hash]);
+  }
+
+  var tmpName = `tmp_view_${hash}`;
 
   var columnUsageQuery = `
     SELECT
@@ -230,8 +240,11 @@ function createView(name, query, callback) {
       view_name = $1
   `;
 
+  // Replace all parameter values with NULL
+  var tmpQuery = query.replace(/\$\d/g, 'NULL');
+
   var sql = [
-    `CREATE OR REPLACE TEMP VIEW ${tmpName} AS ${query}`,
+    `CREATE OR REPLACE TEMP VIEW ${tmpName} AS (${tmpQuery})`,
     [tableUsageQuery, [tmpName]],
     [columnUsageQuery, [tmpName]]
   ];
@@ -267,7 +280,7 @@ function createView(name, query, callback) {
     var columnSql = _.map(columns,
       (col, index) => `"${col.table}"."${col.name}" AS ${col.alias}`);
 
-    var viewQuery = query.replace(pattern, `
+    query = query.replace(pattern, `
       SELECT
         CONCAT(${keySql.join(", '|', ")}) AS _id,
         ${columnSql},
@@ -275,15 +288,9 @@ function createView(name, query, callback) {
       FROM
     `);
 
-    var sql = [
-      `DROP VIEW ${tmpName}`,
-      `CREATE OR REPLACE TEMP VIEW ${this.viewName} AS ${viewQuery}`
-    ];
+    cachedQueries[hash] = { keys, columns, query };
 
-    querySequence(this.conn, sql, (error, result) =>  {
-      if(error) return callback.call(this, error);
-      return callback.call(this, null, { keys, columns });
-    });
+    return callback(null, cachedQueries[hash]);
   });
 }
 

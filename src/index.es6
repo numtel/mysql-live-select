@@ -3,18 +3,17 @@ var anyDB        = require('any-db');
 var _            = require('lodash');
 
 var PgTriggers = require('./PgTriggers');
+var querySequence = require('./querySequence');
 
 const CONN_STR = 'postgres://meteor:meteor@127.0.0.1/meteor';
 
 // Initialize
 var conn = anyDB.createConnection(CONN_STR);
 
-// Create a trigger manager for this connection
-// Each connection should run on its own unique channel (2nd arg)
-var triggers = new PgTriggers(conn, 'test');
+conn.setMaxListeners(0);
 
 class liveClassScores extends EventEmitter {
-  constructor(triggers, classId) {
+  constructor(triggers, classId, score) {
     if(typeof triggers !== 'object' || typeof triggers.select !== 'function')
       throw new Error('first argument must be trigger manager object');
     if(typeof classId !== 'number')
@@ -35,26 +34,115 @@ class liveClassScores extends EventEmitter {
       INNER JOIN students ON
         (students.id = scores.student_id)
       WHERE
-        assignments.class_id = ${classId} AND scores.score > 10
-    `);
+        assignments.class_id = $1 AND scores.score BETWEEN $2 AND ($2 + 5)
+    `, [classId, score]);
 
     mySelect.on('update', (results, allRows) => {
       this.emit('update', results, allRows);
     });
+
+    mySelect.on('ready', (results) => {
+      this._ready = true;
+      this.emit('ready', results);
+    });
   }
 }
 
-var myClassScores = new liveClassScores(triggers, 1);
+var triggers  = [];
+var scores    = [];
+var startDate = new Date();
+var endDate   = null;
 
-myClassScores.on('update', (diff, allRows) => {
-  console.log(diff, _.keys(allRows).length);
+function end() {
+  endDate = new Date();
+
+  console.log('finished in', endDate - startDate - 10000);
+}
+
+var throttledEnd = _.throttle(end, 10000, { leading : false });
+
+conn.query(`TRUNCATE scores`, (error, result) => {
+  // Create a trigger manager for this connection
+  // Each connection should run on its own unique channel (2nd arg)
+  for(var i = 0; i < 10; i++) {
+    triggers[i] = new PgTriggers(conn, `test${i}`);
+    scores[i]   = new liveClassScores(triggers[i], 1, i * 10);
+
+    scores[i].on('update', function(i, results, allRows) {
+      console.log(i, results);
+
+      if(!endDate) {
+        throttledEnd();
+      }
+    }.bind(this, i));
+
+    scores[i].on('ready', (i) => {
+      var ready = !scores.filter((tmpScores) => !tmpScores._ready).length;
+
+      if(ready) {
+        test();
+      }
+    }.bind(this, i));
+  }
 });
+
+function test() {
+  // Get some values to use
+  var init = [
+    `SELECT id FROM students`,
+    `SELECT id FROM assignments`
+  ];
+
+  var studentIds    = [];
+  var assignmentIds = [];
+
+  querySequence(conn, init, (error, result) => {
+    studentIds    = result[0].rows.map((row) => row.id);
+    assignmentIds = result[1].rows.map((row) => row.id);
+
+    var sql  = [];
+    var rows = [];
+
+    for(var i = 0; i < 500; i++) {
+      var studentId    = choice(studentIds);
+      var assignmentId = choice(assignmentIds);
+      var score        = Math.random() * 100;
+
+      rows.push(`
+          (${studentId}, ${assignmentId}, ${score})
+      `);
+    }
+
+    sql.push(`
+      INSERT INTO scores
+        (student_id, assignment_id, score)
+      VALUES
+        ${rows.join(", ")}
+    `);
+
+    querySequence(conn, sql, (error, result) => {
+      if(error) return console.log(error);
+    });
+  });
+}
+
+function choice(items) {
+  var i = Math.floor(Math.random() * items.length);
+  return items[i];
+}
 
 process.on('SIGINT', function() {
   // Ctrl+C
-  triggers.cleanup((error, results) => {
-    if(error) throw error;
-    conn.end();
-    process.exit();
-  });
+  for(var i in triggers) {
+    triggers[i].cleanup((i, error, results) => {
+      if(error) throw error;
+
+      triggers[i]._done = true;
+
+      if(!triggers.filter((trigger) => !trigger._done).length) {
+        conn.end();
+        process.exit();
+      }
+    }.bind(this, i));
+  }
 });

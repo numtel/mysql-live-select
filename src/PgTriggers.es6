@@ -32,8 +32,8 @@ class PgTriggers extends EventEmitter {
   createTrigger(table, payloadColumns) {
     return new RowTrigger(this, table, payloadColumns);
   }
-  select(query) {
-    return new LiveSelect(this, query);
+  select(query, params) {
+    return new LiveSelect(this, query, params);
   }
   cleanup(callback) {
     var { payloadColumnBuffer, conn, channel } = this;
