@@ -34,8 +34,26 @@ class liveClassScores extends EventEmitter {
       INNER JOIN students ON
         (students.id = scores.student_id)
       WHERE
-        assignments.class_id = $1 AND scores.score BETWEEN $2 AND ($2 + 5)
+        assignments.class_id = $1 AND scores.score BETWEEN $2 AND $2 + 10
     `, [classId, score]);
+
+    console.log(`
+      SELECT
+        students.name  AS student_name,
+        students.id    AS student_id,
+        assignments.id AS assignment_id,
+        assignments.name,
+        assignments.value,
+        scores.score
+      FROM
+        scores
+      INNER JOIN assignments ON
+        (assignments.id = scores.assignment_id)
+      INNER JOIN students ON
+        (students.id = scores.student_id)
+      WHERE
+        assignments.class_id = ${classId} AND scores.score BETWEEN ${score} AND ${score} + 5
+    `);
 
     mySelect.on('update', (results, allRows) => {
       this.emit('update', results, allRows);
@@ -56,10 +74,10 @@ var endDate   = null;
 function end() {
   endDate = new Date();
 
-  console.log('finished in', endDate - startDate - 10000);
+  console.log('finished in', endDate - startDate - 1000);
 }
 
-var throttledEnd = _.throttle(end, 10000, { leading : false });
+var throttledEnd = _.throttle(end, 1000, { leading : false });
 
 conn.query(`TRUNCATE scores`, (error, result) => {
   // Create a trigger manager for this connection
@@ -69,7 +87,9 @@ conn.query(`TRUNCATE scores`, (error, result) => {
     scores[i]   = new liveClassScores(triggers[i], 1, i * 10);
 
     scores[i].on('update', function(i, results, allRows) {
-      console.log(i, results);
+      for(var r in results) {
+        console.log(`${i * 10} - ${i * 10 + 5}`, results[r][0], results[r][1]._id, results[r][1].score);
+      }
 
       if(!endDate) {
         throttledEnd();
@@ -103,10 +123,10 @@ function test() {
     var sql  = [];
     var rows = [];
 
-    for(var i = 0; i < 500; i++) {
+    for(var i = 0; i < 100; i++) {
       var studentId    = choice(studentIds);
       var assignmentId = choice(assignmentIds);
-      var score        = Math.random() * 100;
+      var score        = Math.ceil(Math.random() * 100);
 
       rows.push(`
           (${studentId}, ${assignmentId}, ${score})
@@ -121,6 +141,7 @@ function test() {
     `);
 
     querySequence(conn, sql, (error, result) => {
+      console.log('done inserting');
       if(error) return console.log(error);
     });
   });

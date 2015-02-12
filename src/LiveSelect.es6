@@ -14,8 +14,6 @@ class LiveSelect extends EventEmitter {
     this.data   = {};
     this.ready  = false;
 
-    this.throttledRefresh = _.debounce(this.refresh, 1000, { leading: true });
-
     // Create view for this query
     addHelpers.call(this, query, (error, result) => {
       if(error) return this.emit('error', error);
@@ -79,7 +77,7 @@ class LiveSelect extends EventEmitter {
         });
 
         if(!_.isEmpty(tmpRow)) {
-          this.throttledRefresh(tmpRow);
+          this.refresh(tmpRow);
         }
       });
 
