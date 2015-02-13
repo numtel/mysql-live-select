@@ -6,7 +6,7 @@ var querySequence = require('./querySequence');
 var cachedQueries = {};
 
 const THROTTLE_INTERVAL = 1000;
-const MAX_CONDITIONS    = 5000;
+const MAX_CONDITIONS    = 3500;
 
 class LiveSelect extends EventEmitter {
   constructor(parent, query, params) {
