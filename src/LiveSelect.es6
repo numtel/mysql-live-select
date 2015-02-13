@@ -6,6 +6,7 @@ var querySequence = require('./querySequence');
 var cachedQueries = {};
 
 const THROTTLE_INTERVAL = 1000;
+const MAX_CONDITIONS    = 5000;
 
 class LiveSelect extends EventEmitter {
   constructor(parent, query, params) {
@@ -15,10 +16,10 @@ class LiveSelect extends EventEmitter {
     this.client = client;
     this.data   = {};
     this.ready  = false;
+
     // throttledRefresh method buffers
-    this.lastUpdate = 0;
-    this.refreshQueue = false;
-    this.currentTimeout = null;
+    this.refreshQueue     = [];
+    this.throttledRefresh = _.debounce(this.refresh, THROTTLE_INTERVAL);
 
     // Create view for this query
     addHelpers.call(this, query, (error, result) => {
@@ -83,7 +84,14 @@ class LiveSelect extends EventEmitter {
         });
 
         if(!_.isEmpty(tmpRow)) {
-          this.throttledRefresh(tmpRow);
+          this.refreshQueue.push(tmpRow);
+
+          if(MAX_CONDITIONS && this.refreshQueue.length >= MAX_CONDITIONS) {
+            this.refresh();
+          }
+          else {
+            this.throttledRefresh();
+          }
         }
       });
 
@@ -97,22 +105,28 @@ class LiveSelect extends EventEmitter {
     });
   }
 
-  refresh(conditions) {
-    // Build WHERE clause if not refreshing entire result set
+  refresh(initial) {
     var params = this.params.slice(), where;
-    if(conditions instanceof Array) {
+
+    if(initial) {
+      where = '';
+    }
+    else if(this.refreshQueue.length) {
+      // Build WHERE clause if not refreshing entire result set
       var valueCount = params.length;
+
       where = 'WHERE ' +
-        conditions.map((condition) => '(' +
+        this.refreshQueue.map((condition) => '(' +
           _.map(condition, (value, column) => {
             params.push(value);
             return `${column} = $${++valueCount}`
           }).join(' AND ') + ')'
         ).join(' OR ');
-    }else if(conditions === true){
-      where  = '';
-    }else{
-      return; // Do nothing if falsey
+
+      this.refreshQueue = [];
+    }
+    else {
+      return; // Do nothing if there are no conditions
     }
 
     var sql = `
@@ -202,29 +216,11 @@ class LiveSelect extends EventEmitter {
       this.emit('update', diff, this.data);
     }
   }
-  throttledRefresh(condition) {
-    var now = Date.now();
-    // Update queue condition
-    if(condition === true){
-      // Refreshing entire result set takes precedence
-      this.refreshQueue = true;
-    }else if(this.refreshQueue !== true && typeof condition === 'object'){
-      if(!(this.refreshQueue instanceof Array)){
-        this.refreshQueue = [];
-      }
-      this.refreshQueue.push(condition);
-    }
-    // else if condition undefined or false, leave queue alone
 
-    if(this.currentTimeout === null){
-      this.currentTimeout = setTimeout(() => {
-        if(this.refreshQueue){
-          this.refresh(this.refreshQueue);
-          this.refreshQueue   = false;
-          this.lastUpdate     = now;
-          this.currentTimeout = null;
-        }
-      }, this.lastUpdate + THROTTLE_INTERVAL < now ? 0 : THROTTLE_INTERVAL);
+  flush() {
+    if(this.refreshQueue.length) {
+      refresh(this.refreshQueue);
+      this.refreshQueue = [];
     }
   }
 }
