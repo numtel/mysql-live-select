@@ -2,7 +2,7 @@
   "name": "pg-notify-trigger",
   "version": "0.0.1",
   "description": "Trigger notify for specific row change events",
-  "main": "lib/index.js",
+  "main": "lib/PgTriggers.js",
   "engines": {
     "node": "0.10"
   },
@@ -13,7 +13,7 @@
     "start": "node ./lib/index.js",
     "make": "6to5 src --out-dir lib",
     "make-start": "npm run make && npm start",
-    "test": "nodeunit --reporter=minimal test"
+    "test": "CONN=\"postgres://meteor:meteor@127.0.0.1/meteor_test\" CHANNEL=\"package_test\" DEBUG=0 STATS=1 nodeunit test/index.js"
   },
   "keywords": [
     "postgresql",

@@ -10,6 +10,8 @@ module.exports = function(client, debug, queries, callback){
     debug = false;
   }
 
+  if(queries.length === 0) return callback();
+
   var results = [];
 
   client.query('BEGIN', (error, result) => {
@@ -49,5 +51,5 @@ module.exports = function(client, debug, queries, callback){
 
     sequence[0]();
   });
-
 };
+

@@ -10,6 +10,8 @@ This node.js package/sample application provides notifications on row changes.
 
 4. Then run `npm run make-start` to build the ES6 files and start the app at index.js.
 
+* Configure test suite connection string in `package.json`, then run the suite with `npm run make && npm test`.
+
 ## PgTriggers Class
 
 ### constructor(conn, channel)
@@ -104,8 +106,7 @@ Same as `refresh` method except will not perform operations faster than 1 per se
 
 Event Name | Arguments | Description
 ---------|------|---------------------------
-`diff` | `diff` | Array of changes to result set, called before updating data
-`update` | `rows` | New result set, called after updating data
+`update` | `diff`, `rows` | `rows` contains full data set
 `error` | `error` | Unhandled exceptions will be thrown
 
 

@@ -3,6 +3,8 @@ var _            = require('lodash');
 
 var querySequence = require('./querySequence');
 
+var queue = [], queueBusy = false;
+
 class RowTrigger extends EventEmitter {
   constructor(parent, table, payloadColumns) {
     this.table = table;
@@ -44,7 +46,10 @@ class RowTrigger extends EventEmitter {
 
     var triggerName = `${channel}_${table}`;
 
-    querySequence(client, [
+    queue.push({
+      client,
+      instance: this,
+      queries: [
       `CREATE OR REPLACE FUNCTION ${triggerName}() RETURNS trigger AS $$
         DECLARE
           row_data RECORD;
@@ -65,11 +70,8 @@ class RowTrigger extends EventEmitter {
       `CREATE TRIGGER "${triggerName}"
         AFTER INSERT OR UPDATE OR DELETE ON "${table}"
         FOR EACH ROW EXECUTE PROCEDURE ${triggerName}()`
-    ], (error, results) => {
-      if(error) return this.emit('error', error);
-      this.ready = true;
-      this.emit('ready', results);
-    });
+    ]});
+    processQueue();
 
   }
   forwardNotification(payload) {
@@ -79,3 +81,23 @@ class RowTrigger extends EventEmitter {
 
 module.exports = RowTrigger;
 
+function processQueue() {
+  if(queueBusy === true) return;
+
+  queueBusy = true;
+  if(queue.length > 0){
+    var processItem = queue.shift();
+    querySequence(processItem.client, processItem.queries, (error, results) => {
+      if(error) return processItem.instance.emit('error', error);
+
+      processItem.instance.ready = true;
+      processItem.instance.emit('ready', results);
+
+      // Continue in queue
+      queueBusy = false;
+      processQueue();
+    });
+  }else{
+    queueBusy = false;
+  }
+}

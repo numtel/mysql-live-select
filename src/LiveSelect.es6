@@ -5,6 +5,8 @@ var murmurHash    = require('../dist/murmurhash3_gc');
 var querySequence = require('./querySequence');
 var cachedQueries = {};
 
+const THROTTLE_INTERVAL = 1000;
+
 class LiveSelect extends EventEmitter {
   constructor(parent, query, params) {
     var { client, channel } = parent;
@@ -13,6 +15,10 @@ class LiveSelect extends EventEmitter {
     this.client = client;
     this.data   = {};
     this.ready  = false;
+    // throttledRefresh method buffers
+    this.lastUpdate = 0;
+    this.refreshQueue = false;
+    this.currentTimeout = null;
 
     // Create view for this query
     addHelpers.call(this, query, (error, result) => {
@@ -77,7 +83,7 @@ class LiveSelect extends EventEmitter {
         });
 
         if(!_.isEmpty(tmpRow)) {
-          this.refresh(tmpRow);
+          this.throttledRefresh(tmpRow);
         }
       });
 
@@ -91,22 +97,22 @@ class LiveSelect extends EventEmitter {
     });
   }
 
-  refresh(condition) {
-    if(condition === true) {
-      var where  = '';
-      var params = this.params;
-    }
-    else {
-      var where  = [];
-      var params = _.clone(this.params);
-
-      // Build WHERE clause if not refreshing entire result set
-      _.forOwn(condition, (value, key) => {
-        params.push(value);
-        where.push(`${key} = $${params.length}`);
-      });
-
-      where = `WHERE ${where.join(' AND ')}`;
+  refresh(conditions) {
+    // Build WHERE clause if not refreshing entire result set
+    var params = this.params.slice(), where;
+    if(conditions instanceof Array) {
+      var valueCount = params.length;
+      where = 'WHERE ' +
+        conditions.map((condition) => '(' +
+          _.map(condition, (value, column) => {
+            params.push(value);
+            return `${column} = $${++valueCount}`
+          }).join(' AND ') + ')'
+        ).join(' OR ');
+    }else if(conditions === true){
+      where  = '';
+    }else{
+      return; // Do nothing if falsey
     }
 
     var sql = `
@@ -194,6 +200,31 @@ class LiveSelect extends EventEmitter {
     else if(diff.length !== 0){
       // Output all difference events in a single event
       this.emit('update', diff, this.data);
+    }
+  }
+  throttledRefresh(condition) {
+    var now = Date.now();
+    // Update queue condition
+    if(condition === true){
+      // Refreshing entire result set takes precedence
+      this.refreshQueue = true;
+    }else if(this.refreshQueue !== true && typeof condition === 'object'){
+      if(!(this.refreshQueue instanceof Array)){
+        this.refreshQueue = [];
+      }
+      this.refreshQueue.push(condition);
+    }
+    // else if condition undefined or false, leave queue alone
+
+    if(this.currentTimeout === null){
+      this.currentTimeout = setTimeout(() => {
+        if(this.refreshQueue){
+          this.refresh(this.refreshQueue);
+          this.refreshQueue   = false;
+          this.lastUpdate     = now;
+          this.currentTimeout = null;
+        }
+      }, this.lastUpdate + THROTTLE_INTERVAL < now ? 0 : THROTTLE_INTERVAL);
     }
   }
 }

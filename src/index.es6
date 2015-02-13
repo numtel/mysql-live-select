@@ -1,3 +1,6 @@
+/**
+ * Example application
+ */
 var EventEmitter = require('events').EventEmitter;
 var pg           = require('pg');
 var _            = require('lodash');
