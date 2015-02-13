@@ -6,18 +6,18 @@ var RowTrigger = require('./RowTrigger');
 var LiveSelect = require('./LiveSelect');
 
 class PgTriggers extends EventEmitter {
-  constructor(conn, channel) {
-    this.conn = conn;
+  constructor(client, channel) {
+    this.client = client;
     this.payloadColumnBuffer = {};
     this.channel = channel;
 
     this.setMaxListeners(0); // Allow unlimited listeners
 
-    conn.query(`LISTEN "${channel}"`, function(error, result) {
+    client.query(`LISTEN "${channel}"`, function(error, result) {
       if(error) throw error;
     });
 
-    conn.on('notification', (info) => {
+    client.on('notification', (info) => {
       if(info.channel === channel) {
         try {
           var payload = JSON.parse(info.payload);
@@ -32,11 +32,11 @@ class PgTriggers extends EventEmitter {
   createTrigger(table, payloadColumns) {
     return new RowTrigger(this, table, payloadColumns);
   }
-  select(query, triggers) {
-    return new LiveSelect(this, query, triggers);
+  select(query, params) {
+    return new LiveSelect(this, query, params);
   }
   cleanup(callback) {
-    var { payloadColumnBuffer, conn, channel } = this;
+    var { payloadColumnBuffer, client, channel } = this;
 
     var queries = [];
     _.forOwn(payloadColumnBuffer, (payloadColumns, table) => {
@@ -45,7 +45,7 @@ class PgTriggers extends EventEmitter {
       queries.push(`DROP FUNCTION IF EXISTS ${triggerName}()`);
     });
 
-    querySequence(conn, queries, callback);
+    querySequence(client, queries, callback);
   }
 }
 
