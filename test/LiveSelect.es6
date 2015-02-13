@@ -6,11 +6,12 @@ var querySequence = require('../src/querySequence');
 var scoresLoadFixture = require('./fixtures/scoresLoad');
 
 exports.scoresLoad = function(test) {
-  var classCount = 2;
+  var classCount =
+    process.env.CLASS_COUNT ? parseInt(process.env.CLASS_COUNT) : 10;
   var fixtureData = scoresLoadFixture.generate(
     classCount, // number of classes
-    1, // assignments per class
-    2, // students per class
+    40, // assignments per class
+    20, // students per class
     6   // classes per student
   );
   // Generate new names to update to
