@@ -5,7 +5,7 @@ var murmurHash    = require('../dist/murmurhash3_gc');
 var querySequence = require('./querySequence');
 var cachedQueries = {};
 
-const THROTTLE_INTERVAL = 1000;
+const THROTTLE_INTERVAL = 200;
 const MAX_CONDITIONS    = 3500;
 
 class LiveSelect extends EventEmitter {
@@ -241,7 +241,7 @@ function addHelpers(query, callback) {
 
   var tmpName = `tmp_view_${hash}`;
 
-  var columnUsageQuery = `
+  var columnUsageSQL = `
     SELECT DISTINCT
       vc.table_name,
       vc.column_name
@@ -251,7 +251,7 @@ function addHelpers(query, callback) {
       view_name = $1
   `;
 
-  var tableUsageQuery = `
+  var tableUsageSQL = `
     SELECT DISTINCT
       vt.table_name,
       cc.column_name
@@ -272,12 +272,25 @@ function addHelpers(query, callback) {
   `;
 
   // Replace all parameter values with NULL
-  var tmpQuery = query.replace(/\$\d/g, 'NULL');
+  var tmpQuery      = query.replace(/\$\d/g, 'NULL');
+  var createViewSQL = `CREATE OR REPLACE TEMP VIEW ${tmpName} AS (${tmpQuery})`;
+
+  var columnUsageQuery = {
+    name   : 'column_usage_query',
+    text   : columnUsageSQL,
+    values : [tmpName]
+  };
+
+  var tableUsageQuery = {
+    name   : 'table_usage_query',
+    text   : tableUsageSQL,
+    values : [tmpName]
+  };
 
   var sql = [
     `CREATE OR REPLACE TEMP VIEW ${tmpName} AS (${tmpQuery})`,
-    [tableUsageQuery, [tmpName]],
-    [columnUsageQuery, [tmpName]]
+    tableUsageQuery,
+    columnUsageQuery
   ];
 
   // Create a temporary view to figure out what columns will be used
