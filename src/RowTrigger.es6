@@ -9,7 +9,7 @@ class RowTrigger extends EventEmitter {
     this.payloadColumns = payloadColumns;
     this.ready = false;
 
-    var { payloadColumnBuffer, conn, channel } = parent;
+    var { payloadColumnBuffer, client, channel } = parent;
 
     parent.on(`change:${table}`, this.forwardNotification.bind(this));
 
@@ -44,7 +44,7 @@ class RowTrigger extends EventEmitter {
 
     var triggerName = `${channel}_${table}`;
 
-    querySequence(conn, [
+    querySequence(client, [
       `CREATE OR REPLACE FUNCTION ${triggerName}() RETURNS trigger AS $$
         DECLARE
           row_data RECORD;

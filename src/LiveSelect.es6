@@ -1,16 +1,16 @@
 var EventEmitter = require('events').EventEmitter;
 var _            = require('lodash');
 
-var murmurHash = require('../dist/murmurhash3_gc');
+var murmurHash    = require('../dist/murmurhash3_gc');
 var querySequence = require('./querySequence');
 var cachedQueries = {};
 
 class LiveSelect extends EventEmitter {
   constructor(parent, query, params) {
-    var { conn, channel } = parent;
+    var { client, channel } = parent;
 
     this.params = params;
-    this.conn   = conn;
+    this.client = client;
     this.data   = {};
     this.ready  = false;
 
@@ -83,7 +83,7 @@ class LiveSelect extends EventEmitter {
 
       trigger.on('ready', (results) => {
         // Check if all handlers are ready
-        if(this.triggers.filter(trigger => !trigger.ready).length === 0){
+        if(this.triggers.filter(trigger => !trigger.ready).length === 0) {
           this.ready = true;
           this.emit('ready', results);
         }
@@ -116,7 +116,7 @@ class LiveSelect extends EventEmitter {
       ${where}
     `;
 
-    this.conn.query(sql, params, (error, result) =>  {
+    this.client.query(sql, params, (error, result) =>  {
       if(error) return this.emit('error', error);
 
       this.update(result.rows);
@@ -162,14 +162,20 @@ class LiveSelect extends EventEmitter {
     if(existingIds.length) {
       var sql = `
         WITH tmp AS (${this.query})
-        SELECT *
+        SELECT id
         FROM UNNEST(ARRAY['${_.keys(this.data).join("', '")}']) id
         LEFT JOIN tmp ON tmp._id = id
         WHERE tmp._id IS NULL
       `;
 
+      var query = {
+        name   : `prepared_${murmurHash(sql)}`,
+        text   : sql,
+        values : this.params
+      };
+
       // Get any IDs that have been removed
-      this.conn.query(sql, this.params, (error, result) => {
+      this.client.query(query, (error, result) => {
         if(error) return this.emit('error', error);
 
         result.rows.forEach((row) => {
@@ -209,7 +215,7 @@ function addHelpers(query, callback) {
   var tmpName = `tmp_view_${hash}`;
 
   var columnUsageQuery = `
-    SELECT
+    SELECT DISTINCT
       vc.table_name,
       vc.column_name
     FROM
@@ -219,7 +225,7 @@ function addHelpers(query, callback) {
   `;
 
   var tableUsageQuery = `
-    SELECT
+    SELECT DISTINCT
       vt.table_name,
       cc.column_name
     FROM
@@ -248,7 +254,7 @@ function addHelpers(query, callback) {
   ];
 
   // Create a temporary view to figure out what columns will be used
-  querySequence(this.conn, sql, (error, result) => {
+  querySequence(this.client, sql, (error, result) => {
     if(error) return callback.call(this, error);
 
     var tableUsage  = result[1].rows;
