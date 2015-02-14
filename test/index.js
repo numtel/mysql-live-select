@@ -176,7 +176,17 @@ module.exports = {
       });
     });
   },
-
+  error_invalid_connection: function(test){
+    var myTest = new LiveMysql({
+      host: '127.0.0.1',
+      port: 12345,
+      user: 'not-working',
+      password: 'hahhaha'
+    }, function(error){
+      test.equal(error.code, 'ECONNREFUSED');
+      test.done();
+    });
+  },
   error_no_db_selected: function(test){
     server.on('ready', function(conn, esc, escId, queries){
 

@@ -37,11 +37,15 @@ This package has been tested to work in MySQL 5.5.40 and 5.6.19. Expected suppor
 
 The `LiveMysql` constructor makes 3 connections to your MySQL database:
 
-* Connection for executing `SELECT` queries (exposed on instance as `db` property)
+* Connection for executing `SELECT` queries (exposed `node-mysql` instance as `db` property)
 * Replication slave connection
 * `information_schema` connection for column information
 
-One argument, an object defining the settings. In addition to the [`node-mysql` connection settings](https://github.com/felixge/node-mysql#connection-options), the following settings are available:
+
+Argument | Type | Description
+---------|------|---------------------------
+`settings` | `object` | An object defining the settings. In addition to the [`node-mysql` connection settings](https://github.com/felixge/node-mysql#connection-options), the additional settings below are available.
+`callback` | `function` | Optional callback on connection success/failure. Accepts one argument, `error`.
 
 Setting | Type | Description
 --------|------|------------------------------
