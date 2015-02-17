@@ -22,7 +22,7 @@ This package has been tested to work in MySQL 5.5.40 and 5.6.19. Expected suppor
   # binlog config
   server-id        = 1
   binlog_format    = row
-  log_bin          = /usr/local/var/log/mysql/mysql-bin.log
+  log_bin          = /var/log/mysql/mysql-bin.log
   binlog_do_db     = employees   # optional
   expire_logs_days = 10          # optional
   max_binlog_size  = 100M        # optional
