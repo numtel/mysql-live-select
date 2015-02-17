@@ -38,7 +38,7 @@ pg.connect(CONN_STR, function(error, client, done){
 
 process.on('SIGINT', function() {
   // Ctrl+C
-  triggers.cleanup((error, results) => {
+  triggers.stop((error, results) => {
     if(error) throw error;
     clientDone();
     process.exit();

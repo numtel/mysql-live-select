@@ -146,7 +146,7 @@ function choice(items) {
 process.on('SIGINT', function() {
   // Ctrl+C
   for(var i in triggers) {
-    triggers[i].cleanup((i, error, results) => {
+    triggers[i].stop((i, error, results) => {
       if(error) throw error;
 
       triggers[i]._done = true;

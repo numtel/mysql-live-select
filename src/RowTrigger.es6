@@ -1,15 +1,17 @@
 var EventEmitter = require('events').EventEmitter;
 var _            = require('lodash');
 
+var murmurHash    = require('../dist/murmurhash3_gc');
 var querySequence = require('./querySequence');
 
 var queue = [], queueBusy = false;
 
 class RowTrigger extends EventEmitter {
   constructor(parent, table, payloadColumns) {
-    this.table = table;
+    this.table          = table;
     this.payloadColumns = payloadColumns;
-    this.ready = false;
+    this.ready          = false;
+    this.stopped        = false;
 
     var { payloadColumnBuffer, client, channel } = parent;
 
@@ -44,7 +46,11 @@ class RowTrigger extends EventEmitter {
       INTO row_data;
     `;
 
-    var triggerName = `${channel}_${table}`;
+    var triggerHash = murmurHash(JSON.stringify(this.payloadColumns));
+    var triggerName = `${channel}_${table}_${triggerHash}`;
+
+    this.triggerName = triggerName;
+    this.client      = client;
 
     queue.push({
       client,
@@ -71,9 +77,35 @@ class RowTrigger extends EventEmitter {
         AFTER INSERT OR UPDATE OR DELETE ON "${table}"
         FOR EACH ROW EXECUTE PROCEDURE ${triggerName}()`
     ]});
-    processQueue();
 
+    processQueue();
   }
+
+  stop(callback) {
+    if(this.stopped) {
+      return callback();
+    }
+
+    // Remove the CREATE sql from the queue if it exists
+    for(var i in queue) {
+      if(queue[i].instance === this) {
+        queue = queue.splice(i, 1);
+        break;
+      }
+    }
+
+    // Drop the trigger and function if they exist
+    var sql = [
+      `DROP TRIGGER IF EXISTS "${this.triggerName}" ON ${this.table}`,
+      `DROP FUNCTION IF EXISTS "${this.triggerName}()"`
+    ];
+
+    querySequence(this.client, sql, (error, result) => {
+      this.stopped = true;
+      callback(error, result);
+    });
+  }
+
   forwardNotification(payload) {
     this.emit('change', payload);
   }

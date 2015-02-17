@@ -11,12 +11,13 @@ module.exports = {
     };
     checkReady();
   },
+
   tearDown: function(done) {
     // Allow 1 second for next test to begin, otherwise quit
     var startCount = testCount;
     setTimeout(function(){
       if(startCount === testCount){
-        triggers.cleanup(function(error, results) {
+        triggers.stop(function(error, results) {
           if(error) throw error;
           clientDone();
           process.exit();

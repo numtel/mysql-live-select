@@ -12,10 +12,11 @@ class LiveSelect extends EventEmitter {
   constructor(parent, query, params) {
     var { client, channel } = parent;
 
-    this.params = params;
-    this.client = client;
-    this.data   = {};
-    this.ready  = false;
+    this.params  = params;
+    this.client  = client;
+    this.data    = {};
+    this.ready   = false;
+    this.stopped = false;
 
     // throttledRefresh method buffers
     this.refreshQueue     = [];
@@ -56,7 +57,7 @@ class LiveSelect extends EventEmitter {
   }
 
   listen() {
-    this.triggers.forEach((trigger) => {
+    this.triggers.forEach(trigger => {
       trigger.on('change', (payload) => {
         // Update events contain both old and new values in payload
         // using 'new_' and 'old_' prefixes on the column names
@@ -222,6 +223,21 @@ class LiveSelect extends EventEmitter {
       refresh(this.refreshQueue);
       this.refreshQueue = [];
     }
+  }
+
+  stop(callback) {
+    if(this.stopped) {
+      return callback();
+    }
+
+    this.triggers.forEach(trigger => trigger.stop((error, result) => {
+      var stopped = !this.triggers.filter(trigger => !trigger.stopped).length;
+
+      if(stopped) {
+        this.stopped = true;
+        callback();
+      }
+    }));
   }
 }
 
