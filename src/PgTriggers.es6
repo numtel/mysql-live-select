@@ -7,12 +7,11 @@ var LiveSelect = require('./LiveSelect');
 
 class PgTriggers extends EventEmitter {
   constructor(client, channel) {
-    this.client  = client;
-    this.channel = channel;
-    this.stopped = false;
-    this.selects = [];
+    this.client        = client;
+    this.channel       = channel;
+    this.selects       = [];
+    this.triggerTables = [];
 
-    this.payloadColumnBuffer = {};
     this.setMaxListeners(0); // Allow unlimited listeners
 
     client.query(`LISTEN "${channel}"`, function(error, result) {
@@ -21,19 +20,13 @@ class PgTriggers extends EventEmitter {
 
     client.on('notification', (info) => {
       if(info.channel === channel) {
-        try {
-          var payload = JSON.parse(info.payload);
-        } catch(err) {
-          return this.emit('error', new Error('Malformed payload!'));
-        }
-
-        this.emit(`change:${payload._table}`, payload);
+        this.emit(`change:${info.payload}`);
       }
     });
   }
 
-  createTrigger(table, payloadColumns) {
-    return new RowTrigger(this, table, payloadColumns);
+  createTrigger(table) {
+    return new RowTrigger(this, table);
   }
 
   select(query, params) {
@@ -42,19 +35,17 @@ class PgTriggers extends EventEmitter {
     return select;
   }
 
-  stop(callback) {
-    if(this.stopped) {
-      return callback();
-    }
+  cleanup(callback) {
+    var { triggerTables, client, channel } = this;
 
-    this.selects.forEach(select => select.stop(() => {
-      var stopped = !this.selects.filter(select => !select.stopped).length;
+    var queries = [];
+    triggerTables.forEach(table => {
+      var triggerName = `${channel}_${table}`;
+      queries.push(`DROP TRIGGER IF EXISTS ${triggerName} ON ${table}`);
+      queries.push(`DROP FUNCTION IF EXISTS ${triggerName}()`);
+    });
 
-      if(stopped) {
-        this.stopped = true;
-        callback();
-      }
-    }));
+    querySequence(client, queries, callback);
   }
 }
 

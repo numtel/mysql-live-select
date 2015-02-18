@@ -17,7 +17,7 @@ module.exports = {
     var startCount = testCount;
     setTimeout(function(){
       if(startCount === testCount){
-        triggers.stop(function(error, results) {
+        triggers.cleanup(function(error, results) {
           if(error) throw error;
           clientDone();
           process.exit();

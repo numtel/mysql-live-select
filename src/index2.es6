@@ -30,15 +30,15 @@ pg.connect(CONN_STR, function(error, client, done){
       assignments.class_id = $1
   `, [ 1 ]);
 
-  mySelect.on('update', (diff, rows) => {
-    console.log(rows);
+  mySelect.on('update', diff => {
+    console.log(diff);
   });
 
 });
 
 process.on('SIGINT', function() {
   // Ctrl+C
-  triggers.stop((error, results) => {
+  triggers.cleanup((error, results) => {
     if(error) throw error;
     clientDone();
     process.exit();

@@ -5,100 +5,48 @@ var deep         = require('deep-diff');
 var murmurHash    = require('../dist/murmurhash3_gc');
 var querySequence = require('./querySequence');
 var RowCache      = require('./RowCache');
-var cachedQueries = {};
-var cache         = new RowCache();
 
+var cachedQueryTables = {};
+var cache             = new RowCache();
+
+// Minimum duration in milliseconds between refreshing results
+// TODO: determine based on load
+//  https://git.focus-sis.com/beng/pg-notify-trigger/issues/6
 const THROTTLE_INTERVAL = 1000;
 
 class LiveSelect extends EventEmitter {
   constructor(parent, query, params) {
     var { client, channel } = parent;
 
-    this.params  = params;
+    this.query = query;
+    this.params  = params || [];
     this.client  = client;
     this.data    = [];
     this.hashes  = [];
     this.ready   = false;
-    this.stopped = false;
 
     // throttledRefresh method buffers
     this.throttledRefresh = _.debounce(this.refresh, THROTTLE_INTERVAL);
 
-    // Create view for this query
-    addHelpers.call(this, query, (error, result) => {
+    getQueryTables(client, this.query, (error, tables) => {
       if(error) return this.emit('error', error);
 
-      var triggers     = {};
-      var aliases      = {};
-      var primary_keys = result.keys;
-
-      result.columns.forEach((col) => {
-        if(!triggers[col.table]) {
-          triggers[col.table] = [];
-        }
-
-        if(!aliases[col.table]) {
-          aliases[col.table] = {};
-        }
-
-        triggers[col.table].push(col.name);
-        aliases[col.table][col.name] = col.alias;
-      });
-
-      this.triggers = _.map(triggers,
-        (columns, table) => parent.createTrigger(table, columns));
-
-      this.aliases = aliases;
-      this.query   = result.query;
-
-      this.listen();
-
-      // Grab initial results
-      this.refresh();
-    });
-  }
-
-  listen() {
-    this.triggers.forEach(trigger => {
-      trigger.on('change', (payload) => {
-        // Update events contain both old and new values in payload
-        // using 'new_' and 'old_' prefixes on the column names
-        var argVals = {};
-
-        if(payload._op === 'UPDATE') {
-          trigger.payloadColumns.forEach((col) => {
-            if(payload[`new_${col}`] !== payload[`old_${col}`]) {
-              argVals[col] = payload[`new_${col}`];
-            }
-          });
-        }
-        else {
-          trigger.payloadColumns.forEach((col) => {
-            argVals[col] = payload[col];
-          });
-        }
-
-        // Generate a map denoting which rows to replace
-        var tmpRow = {};
-
-        _.forOwn(argVals, (value, column) => {
-          var alias = this.aliases[trigger.table][column];
-          tmpRow[alias] = value;
+      this.triggers = tables.map(table => parent.createTrigger(table));
+      
+      this.triggers.forEach(trigger => {
+        trigger.on('ready', () => {
+          // Check if all handlers are ready
+          if(this.triggers.filter(trigger => !trigger.ready).length === 0) {
+            this.ready = true;
+            this.emit('ready');
+          }
         });
-
-        if(!_.isEmpty(tmpRow)) {
-          this.throttledRefresh();
-        }
-      });
-
-      trigger.on('ready', (results) => {
-        // Check if all handlers are ready
-        if(this.triggers.filter(trigger => !trigger.ready).length === 0) {
-          this.ready = true;
-          this.emit('ready', results);
-        }
+        trigger.on('change', this.throttledRefresh.bind(this));
       });
     });
+
+    // Grab initial results
+    this.refresh();
   }
 
   refresh() {
@@ -208,10 +156,11 @@ class LiveSelect extends EventEmitter {
   }
 
   update(changes) {
+    console.log('UPDATE', changes);
     var remove = [];
 
     // Emit an update event with the changes
-    this.emit('update', changes.map(change => {
+    var changes = changes.map(change => {
       var args = [change.type];
 
       if(change.type === 'added') {
@@ -228,129 +177,51 @@ class LiveSelect extends EventEmitter {
       }
       else if(change.type === 'removed') {
         var row = cache.get(change.key);
-
         args.push(change.index, row);
         remove.push(change.key);
       }
 
       return args;
-    }));
+    }).filter(change =>
+      // Filter cache misses
+      change[2] !== null
+    );
+
+    console.log('CHANGES', changes);
+
+    changes.length > 0 && this.emit('update', changes);
 
     remove.forEach(key => cache.remove(key));
   }
 
-  stop(callback) {
-    if(this.stopped) {
-      return callback();
-    }
-
-    this.triggers.forEach(trigger => trigger.stop((error, result) => {
-      var stopped = !this.triggers.filter(trigger => !trigger.stopped).length;
-
-      if(stopped) {
-        this.stopped = true;
-        callback();
-      }
-    }));
+  stop() {
+    this.removeAllListeners();
   }
 }
 
-/**
- * Adds helper columns to a query
- * @context LiveSelect instance
- * @param   String   query    The query
- * @param   Function callback A function that is called with information about the view
- */
-function addHelpers(query, callback) {
-  var hash = murmurHash(query);
-
+function getQueryTables(client, query, callback){
+  var queryHash = murmurHash(query);
   // If this query was cached before, reuse it
-  if(cachedQueries[hash]) {
+  if(cachedQueryTables[queryHash]) {
     return callback(null, cachedQueries[hash]);
   }
 
-  var tmpName = `tmp_view_${hash}`;
-
-  var columnUsageSQL = `
-    SELECT DISTINCT
-      vc.table_name,
-      vc.column_name
-    FROM
-      information_schema.view_column_usage vc
-    WHERE
-      view_name = $1
-  `;
-
-  var tableUsageSQL = `
-    SELECT DISTINCT
-      vt.table_name,
-      cc.column_name
-    FROM
-      information_schema.view_table_usage vt JOIN
-      information_schema.table_constraints tc ON
-        tc.table_catalog = vt.table_catalog AND
-        tc.table_schema = vt.table_schema AND
-        tc.table_name = vt.table_name AND
-        tc.constraint_type = 'PRIMARY KEY' JOIN
-      information_schema.constraint_column_usage cc ON
-        cc.table_catalog = tc.table_catalog AND
-        cc.table_schema = tc.table_schema AND
-        cc.table_name = tc.table_name AND
-        cc.constraint_name = tc.constraint_name
-    WHERE
-      view_name = $1
-  `;
-
+  var tmpName  = `tmp_view_${queryHash}`;
   // Replace all parameter values with NULL
-  var tmpQuery      = query.replace(/\$\d/g, 'NULL');
-  var createViewSQL = `CREATE OR REPLACE TEMP VIEW ${tmpName} AS (${tmpQuery})`;
+  var tmpQuery = query.replace(/\$\d/g, 'NULL');
 
-  var columnUsageQuery = {
-    name   : 'column_usage_query',
-    text   : columnUsageSQL,
-    values : [tmpName]
-  };
-
-  var tableUsageQuery = {
-    name   : 'table_usage_query',
-    text   : tableUsageSQL,
-    values : [tmpName]
-  };
-
-  var sql = [
+  querySequence(client, [
     `CREATE OR REPLACE TEMP VIEW ${tmpName} AS (${tmpQuery})`,
-    tableUsageQuery,
-    columnUsageQuery
-  ];
+    [`SELECT DISTINCT vc.table_name 
+      FROM information_schema.view_column_usage vc
+      WHERE view_name = $1`, [ tmpName ] ],
+  ], (error, result) => {
+    if(error) return callback(error);
 
-  // Create a temporary view to figure out what columns will be used
-  querySequence(this.client, sql, (error, result) => {
-    if(error) return callback.call(this, error);
+    var tables = cachedQueryTables[queryHash] =
+      result[1].rows.map(row => row.table_name);
 
-    var tableUsage  = result[1].rows;
-    var columnUsage = result[2].rows;
-
-    var keys    = {};
-    var columns = [];
-
-    tableUsage.forEach((row, index) => {
-      keys[row.table_name] = row.column_name;
-    });
-
-    // This might not be completely reliable
-    var pattern = /SELECT([\s\S]+)FROM/;
-
-    columnUsage.forEach((row, index) => {
-      columns.push({
-        table : row.table_name,
-        name  : row.column_name,
-        alias : `_${row.table_name}_${row.column_name}`
-      });
-    });
-
-    cachedQueries[hash] = { keys, columns, query };
-
-    return callback(null, cachedQueries[hash]);
+    callback(null, tables)
   });
 }
 

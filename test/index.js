@@ -30,5 +30,6 @@ pg.connect(process.env.CONN, function(error, client, done){
 module.exports = _.assign(
   require('./helpers/lifecycle'),
   // Load each test module
-  require('./LiveSelect')
+  // require('./scoresLoad') // Optional CLASS_COUNT env variable, default 1
+  require('./variousQueries')
 );

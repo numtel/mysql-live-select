@@ -1,35 +1,7 @@
-var EventEmitter = require('events').EventEmitter;
 var _ = require('lodash');
 
 var randomString = require('../helpers/randomString');
 var querySequence = require('../../src/querySequence');
-
-
-exports.createSelect = function(triggers, classId) {
-  if(typeof triggers !== 'object' || typeof triggers.select !== 'function')
-    throw new Error('first argument must be trigger manager object');
-  if(typeof classId !== 'number')
-    throw new Error('classId must be integer');
-
-  return triggers.select(`
-    SELECT
-      students.name  AS student_name,
-      students.id    AS student_id,
-      assignments.id AS assignment_id,
-      scores.id      AS score_id,
-      assignments.name,
-      assignments.value,
-      scores.score
-    FROM
-      scores
-    INNER JOIN assignments ON
-      (assignments.id = scores.assignment_id)
-    INNER JOIN students ON
-      (students.id = scores.student_id)
-    WHERE
-      assignments.class_id = $1
-  `, [ classId ]);
-};
 
 /**
  * Generate data structure describing a random scores set
@@ -92,9 +64,9 @@ exports.install = function(generation, callback) {
 
   // Create tables, Insert data
   querySequence(client, [
-    `DROP TABLE IF EXISTS students`,
-    `DROP TABLE IF EXISTS assignments`,
-    `DROP TABLE IF EXISTS scores`,
+    `DROP TABLE IF EXISTS students CASCADE`,
+    `DROP TABLE IF EXISTS assignments CASCADE`,
+    `DROP TABLE IF EXISTS scores CASCADE`,
     `CREATE TABLE students (
       id serial NOT NULL,
       name character varying(50) NOT NULL,

@@ -7,10 +7,10 @@ var scoresLoadFixture = require('./fixtures/scoresLoad');
 
 exports.scoresLoad = function(test) {
   var classCount =
-    process.env.CLASS_COUNT ? parseInt(process.env.CLASS_COUNT) : 10;
+    process.env.CLASS_COUNT ? parseInt(process.env.CLASS_COUNT) : 1;
   var fixtureData = scoresLoadFixture.generate(
     classCount, // number of classes
-    40, // assignments per class
+    4,  // assignments per class
     20, // students per class
     6   // classes per student
   );
@@ -29,7 +29,24 @@ exports.scoresLoad = function(test) {
     if(error) throw error;
 
     var liveSelects = _.range(classCount).map(index =>
-      scoresLoadFixture.createSelect(triggers, index + 1));
+      triggers.select(`
+        SELECT
+          students.name  AS student_name,
+          students.id    AS student_id,
+          assignments.id AS assignment_id,
+          scores.id      AS score_id,
+          assignments.name,
+          assignments.value,
+          scores.score
+        FROM
+          scores
+        INNER JOIN assignments ON
+          (assignments.id = scores.assignment_id)
+        INNER JOIN students ON
+          (students.id = scores.student_id)
+        WHERE
+          assignments.class_id = $1
+      `, [ index + 1 ]));
     var curStage = 0;
 
     // Stage 0 : cache initial data
@@ -84,7 +101,9 @@ exports.scoresLoad = function(test) {
           case 1:
             readyCount++;
             test.ok(diff
-              .map(change => change[3].student_name === newStudentNames[change[3].student_id - 1])
+              .map(change =>
+                change[3].student_name ===
+                  newStudentNames[change[3].student_id - 1])
               .indexOf(false) === -1, 'Student name update check');
 
             if(readyCount === liveSelects.length){
@@ -97,7 +116,8 @@ exports.scoresLoad = function(test) {
           case 2:
             if(diff
                 .map(change =>
-                  change[3].score === fixtureData.scores[change[3].score_id - 1].score * 2)
+                  change[3].score ===
+                    fixtureData.scores[change[3].score_id - 1].score * 2)
                 .indexOf(false) === -1){
               // LiveSelect is only fully updated after all its scores have
               //  doubled
