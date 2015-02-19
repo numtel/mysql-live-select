@@ -114,8 +114,6 @@ class LiveSelect extends EventEmitter {
           FROM
             tmp
         ) tmp2
-      ORDER BY
-        tmp2._hash DESC
     `;
 
     this.client.query(sql, this.params, (error, result) =>  {
@@ -193,8 +191,6 @@ class LiveSelect extends EventEmitter {
             ) tmp2
           WHERE
             tmp2._hash IN ('${_.keys(fetch).join("', '")}')
-          ORDER BY
-            tmp2._hash DESC
         `;
 
         // Fetch hashes that aren't in the cache

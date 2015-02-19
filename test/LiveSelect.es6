@@ -84,7 +84,7 @@ exports.scoresLoad = function(test) {
           case 1:
             readyCount++;
             test.ok(diff
-              .map(change => change[2].student_name === newStudentNames[change[2].student_id - 1])
+              .map(change => change[3].student_name === newStudentNames[change[3].student_id - 1])
               .indexOf(false) === -1, 'Student name update check');
 
             if(readyCount === liveSelects.length){
