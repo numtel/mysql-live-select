@@ -5,6 +5,7 @@
 	"main"        : "lib/PgTriggers.js",
 	"author"      : "numtel <ben@latenightsketches.com>",
 	"license"     : "TBD",
+	"repository"  : "https://git.focus-sis.com/beng/pg-notify-trigger.git",
 
 	"engines": {
 		"node": "0.10"
@@ -30,6 +31,7 @@
 		"pg"            : "^4.2.0",
 		"lodash"        : "^3.1.0",
 		"deep-diff"     : "^0.3.0",
-		"murmurhash-js" : "^1.0.0"
+		"murmurhash-js" : "^1.0.0",
+		"fibers"        : "^1.0.5"
 	}
 }
