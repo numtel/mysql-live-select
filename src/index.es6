@@ -71,11 +71,12 @@ connect((error, client, done) => {
   client.query(`TRUNCATE scores`, (error, result) => {
     // Create a trigger manager for this connection
     // Each connection should run on its own unique channel (2nd arg)
-    for(var i = 0; i < 10; i++) {
+    for(var i = 0; i < 1; i++) {
       triggers[i] = new PgTriggers(client, `test${i}`);
       scores[i]   = new liveClassScores(triggers[i], 1, i * 10);
 
       scores[i].on('update', function(i, results, allRows) {
+        console.log(results);
         throttledEnd();
       }.bind(this, i));
 
@@ -110,7 +111,7 @@ function test() {
       var sql  = [];
       var rows = [];
 
-      for(var i = 0; i < 1000; i++) {
+      for(var i = 0; i < 10; i++) {
         var studentId    = choice(studentIds);
         var assignmentId = choice(assignmentIds);
         var score        = Math.ceil(Math.random() * 100);

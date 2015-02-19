@@ -1,12 +1,16 @@
 var EventEmitter = require('events').EventEmitter;
 var _            = require('lodash');
+var deep         = require('deep-diff');
 
 var murmurHash    = require('../dist/murmurhash3_gc');
 var querySequence = require('./querySequence');
+var RowCache      = require('./RowCache');
 var cachedQueries = {};
+var cache         = new RowCache();
 
 const THROTTLE_INTERVAL = 200;
 const MAX_CONDITIONS    = 3500;
+
 
 class LiveSelect extends EventEmitter {
   constructor(parent, query, params) {
@@ -14,7 +18,8 @@ class LiveSelect extends EventEmitter {
 
     this.params  = params;
     this.client  = client;
-    this.data    = {};
+    this.data    = [];
+    this.hashes  = [];
     this.ready   = false;
     this.stopped = false;
 
@@ -107,115 +112,145 @@ class LiveSelect extends EventEmitter {
   }
 
   refresh(initial) {
-    var params = this.params.slice(), where;
-
-    if(initial) {
-      where = '';
-    }
-    else if(this.refreshQueue.length) {
-      // Build WHERE clause if not refreshing entire result set
-      var valueCount = params.length;
-
-      where = 'WHERE ' +
-        this.refreshQueue.map((condition) => '(' +
-          _.map(condition, (value, column) => {
-            params.push(value);
-            return `${column} = $${++valueCount}`
-          }).join(' AND ') + ')'
-        ).join(' OR ');
-
-      this.refreshQueue = [];
-    }
-    else {
-      return; // Do nothing if there are no conditions
-    }
-
+    // Run a query to get an updated hash map
     var sql = `
       WITH tmp AS (${this.query})
-      SELECT *
-      FROM tmp
-      ${where}
+      SELECT
+        tmp2._hash
+      FROM
+        (
+          SELECT
+            MD5(CAST(tmp.* AS TEXT)) AS _hash
+          FROM
+            tmp
+        ) tmp2
+      ORDER BY
+        tmp2._hash DESC
     `;
 
-    this.client.query(sql, params, (error, result) =>  {
+    this.client.query(sql, this.params, (error, result) =>  {
       if(error) return this.emit('error', error);
 
-      this.update(result.rows);
+      var hashes = _.pluck(result.rows, '_hash');
+      var diff   = deep.diff(this.hashes, hashes);
+      var fetch  = {};
+
+      // If nothing has changed, stop here
+      if(!diff) {
+        return;
+      }
+
+      // Build a list of changes and hashes to fetch
+      var changes = diff.map(change => {
+        var tmpChange = {};
+
+        if(change.kind === 'E') {
+          _.extend(tmpChange, {
+            type   : 'changed',
+            index  : change.path.pop(),
+            oldKey : change.lhs,
+            newKey : change.rhs
+          });
+
+          if(!cache.get(tmpChange.oldKey)) {
+            fetch[tmpChange.oldKey] = true;
+          }
+
+          if(!cache.get(tmpChange.newKey)) {
+            fetch[tmpChange.newKey] = true;
+          }
+        }
+        else if(change.kind === 'A') {
+          _.extend(tmpChange, {
+            index : change.index
+          })
+
+          if(change.item.kind === 'N') {
+            tmpChange.type = 'added';
+            tmpChange.key  = change.item.rhs;
+          }
+          else {
+            tmpChange.type = 'removed';
+            tmpChange.key  = change.item.lhs;
+          }
+
+          if(!cache.get(tmpChange.key)) {
+            fetch[tmpChange.key] = true;
+          }
+        }
+        else {
+          throw new Error(`Unrecognized change: ${JSON.stringify(change)}`);
+        }
+
+        return tmpChange;
+      });
+
+      if(_.isEmpty(fetch)) {
+        this.update(changes);
+      }
+      else {
+        var sql = `
+          WITH tmp AS (${this.query})
+          SELECT
+            tmp2.*
+          FROM
+            (
+              SELECT
+                MD5(CAST(tmp.* AS TEXT)) AS _hash,
+                tmp.*
+              FROM
+                tmp
+            ) tmp2
+          WHERE
+            tmp2._hash IN ('${_.keys(fetch).join("', '")}')
+          ORDER BY
+            tmp2._hash DESC
+        `;
+
+        // Fetch hashes that aren't in the cache
+        this.client.query(sql, this.params, (error, result) => {
+          if(error) return this.emit('error', error);
+          result.rows.forEach(row => cache.add(row._hash, row));
+
+          this.update(changes);
+        });
+
+        // Store the current hash map
+        this.hashes = hashes;
+      }
     });
   }
 
-  update(rows) {
-    var diff = [];
+  update(changes) {
+    var remove = [];
 
-    // Handle added/changed rows
-    rows.forEach((row) => {
-      var id = row._id;
+    // Emit an update event with the changes
+    this.emit('update', changes.map(change => {
+      var args = [change.type];
 
-      if(this.data[id]) {
-        // If this row existed in the result set,
-        // check to see if anything has changed
-        var hasDiff = false;
+      if(change.type === 'added') {
+        var row = cache.get(change.key);
 
-        for(var col in this.data[id]) {
-          if(this.data[id][col] !== row[col]) {
-            hasDiff = true;
-            break;
-          }
-        }
-
-        hasDiff && diff.push(['changed', this.data[id], row]);
+        args.push(change.index, row);
       }
-      else {
-        // Otherwise, it was added
-        diff.push(['added', row]);
+      else if(change.type === 'changed') {
+        var oldRow = cache.get(change.oldKey);
+        var newRow = cache.get(change.newKey);
+
+        args.push(change.index, oldRow, newRow);
+        remove.push(change.oldKey);
+      }
+      else if(change.type === 'removed') {
+        var row = cache.get(change.key);
+
+        args.push(change.index, row);
+        remove.push(change.key);
       }
 
-      this.data[id] = row;
-    });
+      return args;
+    }));
 
-    // Check to see if there are any
-    // IDs that have been removed
-    // TODO: remove columns that are not in the original
-    // query from the published rows. (Perhaps keeping _id?)
-    // https://git.focus-sis.com/beng/pg-notify-trigger/issues/1
-    var existingIds = _.keys(this.data);
-
-    if(existingIds.length) {
-      var sql = `
-        WITH tmp AS (${this.query})
-        SELECT id
-        FROM UNNEST(ARRAY['${_.keys(this.data).join("', '")}']) id
-        LEFT JOIN tmp ON tmp._id = id
-        WHERE tmp._id IS NULL
-      `;
-
-      var query = {
-        name   : `prepared_${murmurHash(sql)}`,
-        text   : sql,
-        values : this.params
-      };
-
-      // Get any IDs that have been removed
-      this.client.query(query, (error, result) => {
-        if(error) return this.emit('error', error);
-
-        result.rows.forEach((row) => {
-          var oldRow = this.data[row.id];
-
-          diff.push(['removed', oldRow]);
-          delete this.data[row.id];
-        });
-
-        if(diff.length !== 0){
-          // Output all difference events in a single event
-          this.emit('update', diff, this.data);
-        }
-      });
-    }
-    else if(diff.length !== 0){
-      // Output all difference events in a single event
-      this.emit('update', diff, this.data);
-    }
+    remove.forEach(key => cache.remove(key));
   }
 
   flush() {
@@ -333,20 +368,6 @@ function addHelpers(query, callback) {
         alias : `_${row.table_name}_${row.column_name}`
       });
     });
-
-    var keySql = _.map(keys,
-      (value, key) => `CONCAT('${key}', ':', "${key}"."${value}")`);
-
-    var columnSql = _.map(columns,
-      (col, index) => `"${col.table}"."${col.name}" AS ${col.alias}`);
-
-    query = query.replace(pattern, `
-      SELECT
-        CONCAT(${keySql.join(", '|', ")}) AS _id,
-        ${columnSql},
-        $1
-      FROM
-    `);
 
     cachedQueries[hash] = { keys, columns, query };
 
