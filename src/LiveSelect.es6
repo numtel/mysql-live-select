@@ -8,9 +8,7 @@ var RowCache      = require('./RowCache');
 var cachedQueries = {};
 var cache         = new RowCache();
 
-const THROTTLE_INTERVAL = 200;
-const MAX_CONDITIONS    = 3500;
-
+const THROTTLE_INTERVAL = 1000;
 
 class LiveSelect extends EventEmitter {
   constructor(parent, query, params) {
@@ -24,7 +22,6 @@ class LiveSelect extends EventEmitter {
     this.stopped = false;
 
     // throttledRefresh method buffers
-    this.refreshQueue     = [];
     this.throttledRefresh = _.debounce(this.refresh, THROTTLE_INTERVAL);
 
     // Create view for this query
@@ -57,7 +54,7 @@ class LiveSelect extends EventEmitter {
       this.listen();
 
       // Grab initial results
-      this.refresh(true);
+      this.refresh();
     });
   }
 
@@ -90,14 +87,7 @@ class LiveSelect extends EventEmitter {
         });
 
         if(!_.isEmpty(tmpRow)) {
-          this.refreshQueue.push(tmpRow);
-
-          if(MAX_CONDITIONS && this.refreshQueue.length >= MAX_CONDITIONS) {
-            this.refresh();
-          }
-          else {
-            this.throttledRefresh();
-          }
+          this.throttledRefresh();
         }
       });
 
@@ -111,7 +101,7 @@ class LiveSelect extends EventEmitter {
     });
   }
 
-  refresh(initial) {
+  refresh() {
     // Run a query to get an updated hash map
     var sql = `
       WITH tmp AS (${this.query})
@@ -251,13 +241,6 @@ class LiveSelect extends EventEmitter {
     }));
 
     remove.forEach(key => cache.remove(key));
-  }
-
-  flush() {
-    if(this.refreshQueue.length) {
-      refresh(this.refreshQueue);
-      this.refreshQueue = [];
-    }
   }
 
   stop(callback) {

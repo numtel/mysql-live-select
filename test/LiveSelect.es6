@@ -65,14 +65,14 @@ exports.scoresLoad = function(test) {
         updateStudentNames();
       });
 
-      select.on('update', (diff, rows) => {
+      select.on('update', (diff) => {
         switch(curStage){
           case 0:
             readyCount++;
-            initialData[select.params[0] - 1] = _.values(rows);
+            initialData[select.params[0] - 1] = _.values(diff);
 
             if(readyCount === liveSelects.length){
-              printDebug && console.log('INITIAL DATA\n', initialData);
+              printDebug && console.log('INITIAL UPDATE\n', initialData);
 
               curStage++;
               readyCount = 0;
@@ -83,8 +83,8 @@ exports.scoresLoad = function(test) {
             break;
           case 1:
             readyCount++;
-            test.ok(_.values(rows)
-              .map(row => row.student_name === newStudentNames[row.student_id - 1])
+            test.ok(diff
+              .map(change => change[2].student_name === newStudentNames[change[2].student_id - 1])
               .indexOf(false) === -1, 'Student name update check');
 
             if(readyCount === liveSelects.length){
@@ -95,9 +95,9 @@ exports.scoresLoad = function(test) {
             }
             break;
           case 2:
-            if(_.values(rows)
-                .map(row =>
-                  row.score === fixtureData.scores[row.score_id - 1].score * 2)
+            if(diff
+                .map(change =>
+                  change[3].score === fixtureData.scores[change[3].score_id - 1].score * 2)
                 .indexOf(false) === -1){
               // LiveSelect is only fully updated after all its scores have
               //  doubled
