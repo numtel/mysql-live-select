@@ -16,11 +16,11 @@ const THROTTLE_INTERVAL = 1000;
 
 class LiveSelect extends EventEmitter {
   constructor(parent, query, params) {
-    var { client, channel } = parent;
+    var { connect, channel } = parent;
 
-    this.query = query;
+    this.query   = query;
     this.params  = params || [];
-    this.client  = client;
+    this.connect = connect;
     this.data    = [];
     this.hashes  = [];
     this.ready   = false;
@@ -28,20 +28,27 @@ class LiveSelect extends EventEmitter {
     // throttledRefresh method buffers
     this.throttledRefresh = _.debounce(this.refresh, THROTTLE_INTERVAL);
 
-    getQueryTables(client, this.query, (error, tables) => {
+    this.connect((error, client, done) => {
       if(error) return this.emit('error', error);
 
-      this.triggers = tables.map(table => parent.createTrigger(table));
-      
-      this.triggers.forEach(trigger => {
-        trigger.on('ready', () => {
-          // Check if all handlers are ready
-          if(this.triggers.filter(trigger => !trigger.ready).length === 0) {
-            this.ready = true;
-            this.emit('ready');
-          }
+      getQueryTables(client, this.query, (error, tables) => {
+        if(error) return this.emit('error', error);
+
+        this.triggers = tables.map(table => parent.createTrigger(table));
+
+        this.triggers.forEach(trigger => {
+          trigger.on('ready', () => {
+            // Check if all handlers are ready
+            if(this.triggers.filter(trigger => !trigger.ready).length === 0) {
+              this.ready = true;
+              this.emit('ready');
+            }
+          });
+
+          trigger.on('change', this.throttledRefresh.bind(this));
         });
-        trigger.on('change', this.throttledRefresh.bind(this));
+
+        done();
       });
     });
 
@@ -64,99 +71,105 @@ class LiveSelect extends EventEmitter {
         ) tmp2
     `;
 
-    this.client.query(sql, this.params, (error, result) =>  {
+    this.connect((error, client, done) => {
       if(error) return this.emit('error', error);
 
-      var hashes = _.pluck(result.rows, '_hash');
-      var diff   = deep.diff(this.hashes, hashes);
-      var fetch  = {};
+      client.query(sql, this.params, (error, result) =>  {
+        if(error) return this.emit('error', error);
 
-      // If nothing has changed, stop here
-      if(!diff) {
-        return;
-      }
+        var hashes = _.pluck(result.rows, '_hash');
+        var diff   = deep.diff(this.hashes, hashes);
+        var fetch  = {};
 
-      // Build a list of changes and hashes to fetch
-      var changes = diff.map(change => {
-        var tmpChange = {};
-
-        if(change.kind === 'E') {
-          _.extend(tmpChange, {
-            type   : 'changed',
-            index  : change.path.pop(),
-            oldKey : change.lhs,
-            newKey : change.rhs
-          });
-
-          if(!cache.get(tmpChange.oldKey)) {
-            fetch[tmpChange.oldKey] = true;
-          }
-
-          if(!cache.get(tmpChange.newKey)) {
-            fetch[tmpChange.newKey] = true;
-          }
+        // If nothing has changed, stop here
+        if(!diff) {
+          return;
         }
-        else if(change.kind === 'A') {
-          _.extend(tmpChange, {
-            index : change.index
-          })
 
-          if(change.item.kind === 'N') {
-            tmpChange.type = 'added';
-            tmpChange.key  = change.item.rhs;
+        // Build a list of changes and hashes to fetch
+        var changes = diff.map(change => {
+          var tmpChange = {};
+
+          if(change.kind === 'E') {
+            _.extend(tmpChange, {
+              type   : 'changed',
+              index  : change.path.pop(),
+              oldKey : change.lhs,
+              newKey : change.rhs
+            });
+
+            if(!cache.get(tmpChange.oldKey)) {
+              fetch[tmpChange.oldKey] = true;
+            }
+
+            if(!cache.get(tmpChange.newKey)) {
+              fetch[tmpChange.newKey] = true;
+            }
+          }
+          else if(change.kind === 'A') {
+            _.extend(tmpChange, {
+              index : change.index
+            })
+
+            if(change.item.kind === 'N') {
+              tmpChange.type = 'added';
+              tmpChange.key  = change.item.rhs;
+            }
+            else {
+              tmpChange.type = 'removed';
+              tmpChange.key  = change.item.lhs;
+            }
+
+            if(!cache.get(tmpChange.key)) {
+              fetch[tmpChange.key] = true;
+            }
           }
           else {
-            tmpChange.type = 'removed';
-            tmpChange.key  = change.item.lhs;
+            throw new Error(`Unrecognized change: ${JSON.stringify(change)}`);
           }
 
-          if(!cache.get(tmpChange.key)) {
-            fetch[tmpChange.key] = true;
-          }
-        }
-        else {
-          throw new Error(`Unrecognized change: ${JSON.stringify(change)}`);
-        }
-
-        return tmpChange;
-      });
-
-      if(_.isEmpty(fetch)) {
-        this.update(changes);
-      }
-      else {
-        var sql = `
-          WITH tmp AS (${this.query})
-          SELECT
-            tmp2.*
-          FROM
-            (
-              SELECT
-                MD5(CAST(tmp.* AS TEXT)) AS _hash,
-                tmp.*
-              FROM
-                tmp
-            ) tmp2
-          WHERE
-            tmp2._hash IN ('${_.keys(fetch).join("', '")}')
-        `;
-
-        // Fetch hashes that aren't in the cache
-        this.client.query(sql, this.params, (error, result) => {
-          if(error) return this.emit('error', error);
-          result.rows.forEach(row => cache.add(row._hash, row));
-
-          this.update(changes);
+          return tmpChange;
         });
 
-        // Store the current hash map
-        this.hashes = hashes;
-      }
+        if(_.isEmpty(fetch)) {
+          this.update(changes);
+        }
+        else {
+          var sql = `
+            WITH tmp AS (${this.query})
+            SELECT
+              tmp2.*
+            FROM
+              (
+                SELECT
+                  MD5(CAST(tmp.* AS TEXT)) AS _hash,
+                  tmp.*
+                FROM
+                  tmp
+              ) tmp2
+            WHERE
+              tmp2._hash IN ('${_.keys(fetch).join("', '")}')
+          `;
+
+          // Fetch hashes that aren't in the cache
+          client.query(sql, this.params, (error, result) => {
+            if(error) return this.emit('error', error);
+            result.rows.forEach(row => cache.add(row._hash, row));
+
+            this.update(changes);
+          });
+
+          // Store the current hash map
+          this.hashes = hashes;
+        }
+
+        done();
+      });
     });
   }
 
   update(changes) {
-    console.log('UPDATE', changes);
+    // console.log('UPDATE', changes);
     var remove = [];
 
     // Emit an update event with the changes
@@ -187,7 +200,7 @@ class LiveSelect extends EventEmitter {
       change[2] !== null
     );
 
-    console.log('CHANGES', changes);
+    // console.log('CHANGES', changes);
 
     changes.length > 0 && this.emit('update', changes);
 
@@ -201,9 +214,10 @@ class LiveSelect extends EventEmitter {
 
 function getQueryTables(client, query, callback){
   var queryHash = murmurHash(query);
+
   // If this query was cached before, reuse it
   if(cachedQueryTables[queryHash]) {
-    return callback(null, cachedQueries[hash]);
+    return callback(null, cachedQueryTables[queryHash]);
   }
 
   var tmpName  = `tmp_view_${queryHash}`;
@@ -212,7 +226,7 @@ function getQueryTables(client, query, callback){
 
   querySequence(client, [
     `CREATE OR REPLACE TEMP VIEW ${tmpName} AS (${tmpQuery})`,
-    [`SELECT DISTINCT vc.table_name 
+    [`SELECT DISTINCT vc.table_name
       FROM information_schema.view_column_usage vc
       WHERE view_name = $1`, [ tmpName ] ],
   ], (error, result) => {

@@ -19,17 +19,21 @@ var _          = require('lodash');
 var pg         = require('pg');
 var PgTriggers = require('../');
 
+function connect(cb) {
+  return pg.connect(process.env.CONN, cb);
+}
+
 // Define global instances
-pg.connect(process.env.CONN, function(error, client, done){
+connect(function(error, client, done){
   if(error) throw error;
   global.client = client;
   global.clientDone = done;
-  global.triggers = new PgTriggers(client, process.env.CHANNEL);
+  global.triggers = new PgTriggers(connect, process.env.CHANNEL);
 });
 
 module.exports = _.assign(
   require('./helpers/lifecycle'),
   // Load each test module
-  // require('./scoresLoad') // Optional CLASS_COUNT env variable, default 1
-  require('./variousQueries')
+  require('./scoresLoad') // Optional CLASS_COUNT env variable, default 1
+  // require('./variousQueries')
 );

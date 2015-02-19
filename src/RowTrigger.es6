@@ -10,40 +10,44 @@ class RowTrigger extends EventEmitter {
     this.table          = table;
     this.ready          = false;
 
-    var { client, channel } = parent;
-
     parent.on(`change:${table}`, this.forwardNotification.bind(this));
 
-    if(parent.triggerTables.indexOf(table) === -1){
+    if(parent.triggerTables.indexOf(table) === -1) {
       parent.triggerTables.push(table);
 
       // Create the trigger for this table on this channel
+      var channel     = parent.channel;
       var triggerName = `${channel}_${table}`;
 
-      this.triggerName = triggerName;
-      this.client      = client;
+      parent.connect((error, client, done) => {
+        if(error) return this.emit('error', error);
 
-      queue.push({
-        client,
-        instance: this,
-        queries: [
-        `CREATE OR REPLACE FUNCTION ${triggerName}() RETURNS trigger AS $$
-          DECLARE
-            row_data RECORD;
-          BEGIN
-            PERFORM pg_notify('${channel}', '${table}');
-            RETURN NULL;
-          END;
-        $$ LANGUAGE plpgsql`,
-        `DROP TRIGGER IF EXISTS "${triggerName}"
-          ON "${table}"`,
-        `CREATE TRIGGER "${triggerName}"
-          AFTER INSERT OR UPDATE OR DELETE ON "${table}"
-          FOR EACH ROW EXECUTE PROCEDURE ${triggerName}()`
-      ]});
+        var sql = [
+          `CREATE OR REPLACE FUNCTION ${triggerName}() RETURNS trigger AS $$
+            DECLARE
+              row_data RECORD;
+            BEGIN
+              PERFORM pg_notify('${channel}', '${table}');
+              RETURN NULL;
+            END;
+          $$ LANGUAGE plpgsql`,
+          `DROP TRIGGER IF EXISTS "${triggerName}"
+            ON "${table}"`,
+          `CREATE TRIGGER "${triggerName}"
+            AFTER INSERT OR UPDATE OR DELETE ON "${table}"
+            FOR EACH ROW EXECUTE PROCEDURE ${triggerName}()`
+        ];
 
-      processQueue();
-    }else{
+        querySequence(client, sql, (error, results) => {
+          if(error) return this.emit('error', error);
+
+          this.ready = true;
+          this.emit('ready');
+          done();
+        });
+      });
+    }
+    else {
       // Triggers already in place
       this.ready = true;
       this.emit('ready');
@@ -56,24 +60,3 @@ class RowTrigger extends EventEmitter {
 }
 
 module.exports = RowTrigger;
-
-function processQueue() {
-  if(queueBusy === true) return;
-
-  queueBusy = true;
-  if(queue.length > 0){
-    var processItem = queue.shift();
-    querySequence(processItem.client, processItem.queries, (error, results) => {
-      if(error) return processItem.instance.emit('error', error);
-
-      processItem.instance.ready = true;
-      processItem.instance.emit('ready');
-
-      // Continue in queue
-      queueBusy = false;
-      processQueue();
-    });
-  }else{
-    queueBusy = false;
-  }
-}

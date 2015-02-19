@@ -5,13 +5,13 @@ var EventEmitter = require('events').EventEmitter;
 var pg           = require('pg');
 var _            = require('lodash');
 
-var PgTriggers = require('./PgTriggers');
+var PgTriggers    = require('./PgTriggers');
 var querySequence = require('./querySequence');
 
 const CONN_STR = 'postgres://meteor:meteor@127.0.0.1/meteor';
 
-var connect = function(callback) {
-  return pg.connect(CONN_STR, callback);
+var connect = function(cb) {
+  return pg.connect(CONN_STR, cb);
 }
 
 var cleanupDone = null;
@@ -62,6 +62,7 @@ function end() {
 }
 
 var throttledEnd = _.throttle(end, 1000, { leading : false });
+var triggers     = new PgTriggers(connect, 'test_channel');
 
 connect((error, client, done) => {
   if(error) throw error;
@@ -71,12 +72,21 @@ connect((error, client, done) => {
   client.query(`TRUNCATE scores`, (error, result) => {
     // Create a trigger manager for this connection
     // Each connection should run on its own unique channel (2nd arg)
-    for(var i = 0; i < 1; i++) {
-      triggers[i] = new PgTriggers(client, `test${i}`);
-      scores[i]   = new liveClassScores(triggers[i], 1, i * 10);
+    for(var i = 0; i < 10; i++) {
+      scores[i] = new liveClassScores(triggers, 1, i * 10);
 
-      scores[i].on('update', function(i, results, allRows) {
-        console.log(results);
+      scores[i].on('update', function(i, changes) {
+        console.log(i);
+
+        changes.forEach(change => {
+          if(change[0] === 'changed') {
+            console.log({
+              old : change[2],
+              new : change[3]
+            });
+          }
+        });
+
         throttledEnd();
       }.bind(this, i));
 
@@ -111,7 +121,7 @@ function test() {
       var sql  = [];
       var rows = [];
 
-      for(var i = 0; i < 10; i++) {
+      for(var i = 0; i < 100; i++) {
         var studentId    = choice(studentIds);
         var assignmentId = choice(assignmentIds);
         var score        = Math.ceil(Math.random() * 100);
@@ -132,7 +142,12 @@ function test() {
         if(error) return console.log(error);
         client.query(`SELECT COUNT('') AS count FROM scores`, (error, result) => {
           console.log(`inserted ${result.rows.pop().count} scores.`);
-          done();
+          setTimeout(function() {
+            client.query(`UPDATE scores SET score=TRUNC(RANDOM() * 99 + 1)`, (error, result) => {
+              console.log(`updated ${result.rowCount} scores.`);
+              done();
+            })
+          }, 2000);
         });
       });
     });
@@ -146,19 +161,13 @@ function choice(items) {
 
 process.on('SIGINT', function() {
   // Ctrl+C
-  for(var i in triggers) {
-    triggers[i].stop((i, error, results) => {
-      if(error) throw error;
+  triggers.cleanup((error, results) => {
+    if(error) throw error;
 
-      triggers[i]._done = true;
+    if(cleanupDone) {
+      cleanupDone();
+    }
 
-      if(!triggers.filter((trigger) => !trigger._done).length) {
-        if(cleanupDone) {
-          cleanupDone();
-        }
-
-        process.exit();
-      }
-    }.bind(this, i));
-  }
+    process.exit();
+  });
 });
