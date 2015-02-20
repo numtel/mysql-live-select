@@ -2,7 +2,6 @@
  * Describe cases against data to fed into fixtures/scoresLoad.es6 :: install()
  */
 const UNCHANGED_WAIT = 1000;
-const ID_ALIAS = 'nonoonoono';
 
 exports.data = {
 	assignments: [

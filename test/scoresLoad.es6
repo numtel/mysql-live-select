@@ -127,6 +127,7 @@ exports.scoresLoad = function(test) {
 							// LiveSelect is only fully updated after all its scores have
 							//  doubled
 							readyCount++;
+							select.stop();
 						}
 
 						if(readyCount === liveSelects.length){

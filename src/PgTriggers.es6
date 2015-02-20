@@ -2,6 +2,7 @@ var _            = require('lodash');
 var EventEmitter = require('events').EventEmitter;
 
 var querySequence = require('./querySequence');
+var RowCache      = require('./RowCache');
 var RowTrigger    = require('./RowTrigger');
 var LiveSelect    = require('./LiveSelect');
 
@@ -9,6 +10,7 @@ class PgTriggers extends EventEmitter {
 	constructor(connect, channel) {
 		this.connect       = connect;
 		this.channel       = channel;
+		this.rowCache      = new RowCache;
 		this.triggerTables = [];
 
 		this.setMaxListeners(0); // Allow unlimited listeners

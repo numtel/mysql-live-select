@@ -12,16 +12,12 @@ _.forOwn(variousQueriesFixture.cases, (details, caseId) => {
 
 		scoresLoadFixture.install(variousQueriesFixture.data, (error, result) => {
 			if(error) throw error;
+
 			var select     = triggers.select(details.query);
 			var updateLog  = []; // Cache for any updates to this query
 			var nextLogPos = 0; // Length at last action performed
 
-			select.on('update', diff => {
-				var filteredDiff = filterHashProperties(diff);
-
-				console.log('UPDATE', filteredDiff, updateLog.length);
-				updateLog.push(filteredDiff)
-			});
+			select.on('update', diff => updateLog.push(filterHashProperties(diff)));
 
 			// For each event, check values or perform action, then continue
 			var processEvents = (callback, index) => {

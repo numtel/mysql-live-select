@@ -4,10 +4,8 @@ var EventEmitter = require('events').EventEmitter;
 
 var murmurHash    = require('murmurhash-js').murmur3;
 var querySequence = require('./querySequence');
-var RowCache      = require('./RowCache');
 
 var cachedQueryTables = {};
-var cache             = new RowCache();
 
 // Minimum duration in milliseconds between refreshing results
 // TODO: determine based on load
@@ -16,14 +14,16 @@ const THROTTLE_INTERVAL = 1000;
 
 class LiveSelect extends EventEmitter {
 	constructor(parent, query, params) {
-		var { connect, channel } = parent;
+		var { connect, channel, rowCache } = parent;
 
-		this.query   = query;
-		this.params  = params || [];
-		this.connect = connect;
-		this.data    = [];
-		this.hashes  = [];
-		this.ready   = false;
+		this.query    = query;
+		this.params   = params || [];
+		this.connect  = connect;
+		this.rowCache = rowCache;
+		this.data     = [];
+		this.hashes   = [];
+		this.ready    = false;
+		this.stopped  = false;
 
 		// throttledRefresh method buffers
 		this.throttledRefresh = _.debounce(this.refresh, THROTTLE_INTERVAL);
@@ -59,6 +59,7 @@ class LiveSelect extends EventEmitter {
 	}
 
 	refresh() {
+		if(this.stopped === true) return;
 		// Run a query to get an updated hash map
 		var sql = `
 			WITH
@@ -80,12 +81,12 @@ class LiveSelect extends EventEmitter {
 			client.query(sql, this.params, (error, result) =>  {
 				if(error) return this.emit('error', error);
 
-				var hashes = _.pluck(result.rows, '_hash');
-				var diff   = deep.diff(this.hashes, hashes);
+				var freshHashes = _.pluck(result.rows, '_hash');
+				var diff   = deep.diff(this.hashes, freshHashes);
 				var fetch  = {};
 
 				// Store the new hash map
-				this.hashes = hashes;
+				this.hashes = freshHashes;
 
 				// If nothing has changed, stop here
 				if(!diff || !diff.length) {
@@ -104,11 +105,11 @@ class LiveSelect extends EventEmitter {
 							newKey : change.rhs
 						});
 
-						if(!cache.get(tmpChange.oldKey)) {
+						if(this.rowCache.get(tmpChange.oldKey) === null) {
 							fetch[tmpChange.oldKey] = true;
 						}
 
-						if(!cache.get(tmpChange.newKey)) {
+						if(this.rowCache.get(tmpChange.newKey) === null) {
 							fetch[tmpChange.newKey] = true;
 						}
 					}
@@ -126,7 +127,7 @@ class LiveSelect extends EventEmitter {
 							tmpChange.key  = change.item.lhs;
 						}
 
-						if(!cache.get(tmpChange.key)) {
+						if(this.rowCache.get(tmpChange.key) === null) {
 							fetch[tmpChange.key] = true;
 						}
 					}
@@ -163,7 +164,7 @@ class LiveSelect extends EventEmitter {
 					client.query(sql, this.params, (error, result) => {
 						if(error) return this.emit('error', error);
 
-						result.rows.forEach(row => cache.add(row._hash, row));
+						result.rows.forEach(row => this.rowCache.add(row._hash, row));
 						done();
 						this.update(changes);
 					});
@@ -180,48 +181,40 @@ class LiveSelect extends EventEmitter {
 			var args = [change.type];
 
 			if(change.type === 'added') {
-				var row = cache.get(change.key);
-
-				if(!row) {
-					return this.emit('error', new Error('Failed to retrieve row from cache.'));
-				}
-
+				var row = this.rowCache.get(change.key);
 				args.push(change.index, row);
 			}
 			else if(change.type === 'changed') {
-				var oldRow = cache.get(change.oldKey);
-				var newRow = cache.get(change.newKey);
-
-				if(!oldRow || !newRow) {
-					return this.emit('error', new Error('Failed to retrieve row from cache.'));
-				}
-
+				var oldRow = this.rowCache.get(change.oldKey);
+				var newRow = this.rowCache.get(change.newKey);
 				args.push(change.index, oldRow, newRow);
 				remove.push(change.oldKey);
 			}
 			else if(change.type === 'removed') {
-				var row = cache.get(change.key);
-
-				if(!row) {
-					return this.emit('error', new Error('Failed to retrieve row from cache.'));
-				}
-
+				var row = this.rowCache.get(change.key);
 				args.push(change.index, row);
 				remove.push(change.key);
+			}
+
+			if(args[2] === null){
+				return this.emit('error', new Error(
+					'CACHE_MISS: ' + (args.length === 3 ? change.key : change.oldKey)));
+			}
+			if(args.length > 3 && args[3] === null){
+				return this.emit('error', new Error('CACHE_MISS: ' + change.newKey));
 			}
 
 			return args;
 		});
 
-		remove.forEach(key => cache.remove(key));
-
-// 		console.log('CHANGES', changes);
+		remove.forEach(key => this.rowCache.remove(key));
 
 		this.emit('update', changes);
 	}
 
 	stop() {
-		this.hashes.forEach(key => cache.remove(key));
+		this.hashes.forEach(key => this.rowCache.remove(key));
+		this.stopped = true;
 		this.removeAllListeners();
 	}
 }

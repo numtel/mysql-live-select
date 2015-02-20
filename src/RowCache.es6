@@ -1,10 +1,13 @@
 var _ = require('lodash');
 
-var cache = {};
-
 class RowCache {
+	constructor() {
+		this.cache = {};
+	}
+
 	add(key, data) {
-		if(!cache[key]) {
+		var { cache } = this;
+		if(!(key in cache)) {
 			cache[key] = {
 				data : {},
 				refs : 0
@@ -16,17 +19,19 @@ class RowCache {
 	}
 
 	remove(key) {
-		if(cache[key]) {
+		var { cache } = this;
+		if(key in cache) {
 			cache[key].refs--;
 
-			if(!cache[key].refs) {
+			if(cache[key].refs === 0) {
 				delete cache[key];
 			}
 		}
 	}
 
 	get(key) {
-		return cache[key] ? _.clone(cache[key].data) : null;
+		var { cache } = this;
+		return key in cache ? _.clone(cache[key].data) : null;
 	}
 }
 
