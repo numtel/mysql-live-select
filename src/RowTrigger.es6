@@ -1,7 +1,9 @@
-var EventEmitter = require('events').EventEmitter;
 var _            = require('lodash');
+var Q            = require('q');
+var EventEmitter = require('events').EventEmitter;
 
-var querySequence = require('./querySequence');
+var querySequence   = require('./querySequence');
+var triggerPromises = {};
 
 class RowTrigger extends EventEmitter {
 	constructor(parent, table) {
@@ -10,12 +12,13 @@ class RowTrigger extends EventEmitter {
 
 		parent.on(`change:${table}`, this.forwardNotification.bind(this));
 
-		if(parent.triggerTables.indexOf(table) === -1) {
-			parent.triggerTables.push(table);
-
+		if(!triggerPromises[table]) {
 			// Create the trigger for this table on this channel
 			var channel     = parent.channel;
 			var triggerName = `${channel}_${table}`;
+			var deferred    = Q.defer();
+
+			triggerPromises[table] = deferred.promise;
 
 			parent.connect((error, client, done) => {
 				if(error) return this.emit('error', error);
@@ -39,17 +42,17 @@ class RowTrigger extends EventEmitter {
 				querySequence(client, sql, (error, results) => {
 					if(error) return this.emit('error', error);
 
-					this.ready = true;
-					this.emit('ready');
 					done();
+					parent.triggerTables.push(table);
+					deferred.resolve();
 				});
 			});
 		}
-		else {
-			// Triggers already in place
+
+		triggerPromises[table].then(() => {
 			this.ready = true;
 			this.emit('ready');
-		}
+		});
 	}
 
 	forwardNotification() {

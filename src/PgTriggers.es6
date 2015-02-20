@@ -1,5 +1,6 @@
+var Q            = require('q');
+var _            = require('lodash');
 var EventEmitter = require('events').EventEmitter;
-var _ = require('lodash');
 
 var querySequence = require('./querySequence');
 var RowTrigger    = require('./RowTrigger');
@@ -39,6 +40,8 @@ class PgTriggers extends EventEmitter {
 
 				this.client = client;
 				this.done   = done;
+
+				cb(null, this.client, this.done);
 			});
 		}
 	}

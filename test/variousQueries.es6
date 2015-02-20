@@ -4,6 +4,7 @@ var randomString          = require('./helpers/randomString');
 var querySequence         = require('../src/querySequence');
 var scoresLoadFixture     = require('./fixtures/scoresLoad');
 var variousQueriesFixture = require('./fixtures/variousQueries');
+printDebug = true;
 
 // Create a nodeunit test for each query case
 _.forOwn(variousQueriesFixture.cases, (details, caseId) => {
@@ -19,7 +20,9 @@ _.forOwn(variousQueriesFixture.cases, (details, caseId) => {
 			select.on('update', diff => {
 				var filteredDiff = filterHashProperties(diff);
 
-				console.log('UPDATE', filteredDiff, updateLog.length);
+				diff.forEach(change => console.log(change));
+
+				// console.log('UPDATE', filteredDiff, updateLog.length);
 				updateLog.push(filteredDiff)
 			});
 

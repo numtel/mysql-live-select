@@ -1,6 +1,6 @@
-var EventEmitter = require('events').EventEmitter;
 var _            = require('lodash');
 var deep         = require('deep-diff');
+var EventEmitter = require('events').EventEmitter;
 
 var murmurHash    = require('murmurhash-js').murmur3;
 var querySequence = require('./querySequence');
@@ -39,13 +39,15 @@ class LiveSelect extends EventEmitter {
 				this.triggers.forEach(trigger => {
 					trigger.on('ready', () => {
 						// Check if all handlers are ready
-						if(this.triggers.filter(trigger => !trigger.ready).length === 0) {
+						var pending = this.triggers.filter(trigger => !trigger.ready);
+
+						if(pending.length === 0) {
 							this.ready = true;
 							this.emit('ready');
 						}
-					});
 
-					trigger.on('change', this.throttledRefresh.bind(this));
+						trigger.on('change', this.throttledRefresh.bind(this));
+					});
 				});
 
 				done();
@@ -78,12 +80,14 @@ class LiveSelect extends EventEmitter {
 			client.query(sql, this.params, (error, result) =>  {
 				if(error) return this.emit('error', error);
 
+				done();
+
 				var hashes = _.pluck(result.rows, '_hash');
 				var diff   = deep.diff(this.hashes, hashes);
 				var fetch  = {};
 
 				// If nothing has changed, stop here
-				if(!diff) {
+				if(!diff || !diff.length) {
 					return;
 				}
 
@@ -164,8 +168,6 @@ class LiveSelect extends EventEmitter {
 					// Store the current hash map
 					this.hashes = hashes;
 				}
-
-				done();
 			});
 		});
 	}
@@ -180,17 +182,30 @@ class LiveSelect extends EventEmitter {
 			if(change.type === 'added') {
 				var row = cache.get(change.key);
 
+				if(!row) {
+					this.emit('error', "Failed to retrieve row from cache.");
+				}
+
 				args.push(change.index, row);
 			}
 			else if(change.type === 'changed') {
 				var oldRow = cache.get(change.oldKey);
 				var newRow = cache.get(change.newKey);
 
+				if(!oldRow || !newRow) {
+					this.emit('error', "Failed to retrieve row from cache.");
+				}
+
 				args.push(change.index, oldRow, newRow);
 				remove.push(change.oldKey);
 			}
 			else if(change.type === 'removed') {
 				var row = cache.get(change.key);
+
+				if(!row) {
+					this.emit('error', "Failed to retrieve row from cache.");
+				}
+
 				args.push(change.index, row);
 				remove.push(change.key);
 			}
@@ -198,9 +213,9 @@ class LiveSelect extends EventEmitter {
 			return args;
 		});
 
-		changes.length > 0 && this.emit('update', changes);
-
 		remove.forEach(key => cache.remove(key));
+
+		this.emit('update', changes);
 	}
 
 	stop() {
