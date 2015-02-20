@@ -183,7 +183,7 @@ class LiveSelect extends EventEmitter {
 				var row = cache.get(change.key);
 
 				if(!row) {
-					this.emit('error', "Failed to retrieve row from cache.");
+					return this.emit('error', new Error('Failed to retrieve row from cache.'));
 				}
 
 				args.push(change.index, row);
@@ -193,7 +193,7 @@ class LiveSelect extends EventEmitter {
 				var newRow = cache.get(change.newKey);
 
 				if(!oldRow || !newRow) {
-					this.emit('error', "Failed to retrieve row from cache.");
+					return this.emit('error', new Error('Failed to retrieve row from cache.'));
 				}
 
 				args.push(change.index, oldRow, newRow);
@@ -203,7 +203,7 @@ class LiveSelect extends EventEmitter {
 				var row = cache.get(change.key);
 
 				if(!row) {
-					this.emit('error', "Failed to retrieve row from cache.");
+					return this.emit('error', new Error('Failed to retrieve row from cache.'));
 				}
 
 				args.push(change.index, row);
