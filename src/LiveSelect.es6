@@ -11,7 +11,7 @@ var cache             = new RowCache();
 
 // Minimum duration in milliseconds between refreshing results
 // TODO: determine based on load
-//  https://git.focus-sis.com/beng/pg-notify-trigger/issues/6
+// https://git.focus-sis.com/beng/pg-notify-trigger/issues/6
 const THROTTLE_INTERVAL = 1000;
 
 class LiveSelect extends EventEmitter {
@@ -85,6 +85,9 @@ class LiveSelect extends EventEmitter {
 				var hashes = _.pluck(result.rows, '_hash');
 				var diff   = deep.diff(this.hashes, hashes);
 				var fetch  = {};
+
+				// Store the new hash map
+				this.hashes = hashes;
 
 				// If nothing has changed, stop here
 				if(!diff || !diff.length) {
@@ -164,9 +167,6 @@ class LiveSelect extends EventEmitter {
 						result.rows.forEach(row => cache.add(row._hash, row));
 						this.update(changes);
 					});
-
-					// Store the current hash map
-					this.hashes = hashes;
 				}
 			});
 		});
