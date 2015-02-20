@@ -58,7 +58,6 @@ class LiveSelect extends EventEmitter {
 	}
 
 	refresh() {
-		if(this.stopped === true) return;
 		// Run a query to get an updated hash map
 		var sql = `
 			WITH
