@@ -80,8 +80,6 @@ class LiveSelect extends EventEmitter {
 			client.query(sql, this.params, (error, result) =>  {
 				if(error) return this.emit('error', error);
 
-				done();
-
 				var hashes = _.pluck(result.rows, '_hash');
 				var diff   = deep.diff(this.hashes, hashes);
 				var fetch  = {};
@@ -140,6 +138,7 @@ class LiveSelect extends EventEmitter {
 				});
 
 				if(_.isEmpty(fetch)) {
+					done();
 					this.update(changes);
 				}
 				else {
@@ -165,6 +164,7 @@ class LiveSelect extends EventEmitter {
 						if(error) return this.emit('error', error);
 
 						result.rows.forEach(row => cache.add(row._hash, row));
+						done();
 						this.update(changes);
 					});
 				}
