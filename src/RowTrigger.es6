@@ -2,22 +2,22 @@ var _            = require('lodash');
 var EventEmitter = require('events').EventEmitter;
 
 var querySequence   = require('./querySequence');
-var triggerPromises = {};
 
 class RowTrigger extends EventEmitter {
 	constructor(parent, table) {
 		this.table = table;
 		this.ready = false;
 
+		var { channel, connect, triggerTables } = parent;
+
 		parent.on(`change:${table}`, this.forwardNotification.bind(this));
 
-		if(!triggerPromises[table]) {
+		if(!(table in triggerTables)) {
 			// Create the trigger for this table on this channel
-			var channel     = parent.channel;
 			var triggerName = `${channel}_${table}`;
 
-			triggerPromises[table] = new Promise((resolve, reject) => {
-				parent.connect((error, client, done) => {
+			triggerTables[table] = new Promise((resolve, reject) => {
+				connect((error, client, done) => {
 					if(error) return this.emit('error', error);
 
 					var sql = [
@@ -40,14 +40,13 @@ class RowTrigger extends EventEmitter {
 						if(error) return reject(error);
 
 						done();
-						parent.triggerTables.push(table);
 						resolve();
 					});
-			});
+				});
 			});
 		}
 
-		triggerPromises[table]
+		triggerTables[table]
 			.then(() => {
 				this.ready = true;
 				this.emit('ready');

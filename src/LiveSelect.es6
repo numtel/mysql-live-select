@@ -215,10 +215,13 @@ class LiveSelect extends EventEmitter {
 
 		remove.forEach(key => cache.remove(key));
 
+// 		console.log('CHANGES', changes);
+
 		this.emit('update', changes);
 	}
 
 	stop() {
+		this.hashes.forEach(key => cache.remove(key));
 		this.removeAllListeners();
 	}
 }

@@ -62,6 +62,11 @@ exports.install = function(generation, callback) {
 			 _.flatten(generation[table].map(row => _.values(row))) ];
 	};
 
+	// Reset PgTriggers trigger cache so that triggers are recreated if needed
+	delete triggers.triggerTables.students;
+	delete triggers.triggerTables.assignments;
+	delete triggers.triggerTables.scores;
+
 	// Create tables, Insert data
 	querySequence(client, [
 		`DROP TABLE IF EXISTS students CASCADE`,

@@ -61,7 +61,7 @@ class PgTriggers extends EventEmitter {
 		this.getClient((error, client, done) => {
 			if(error) return this.emit('error', error);
 
-			triggerTables.forEach(table => {
+			_.forOwn(triggerTables, (tablePromise, table) => {
 				var triggerName = `${channel}_${table}`;
 
 				queries.push(`DROP TRIGGER IF EXISTS ${triggerName} ON ${table}`);
