@@ -23,7 +23,6 @@ class LiveSelect extends EventEmitter {
 		this.data     = [];
 		this.hashes   = [];
 		this.ready    = false;
-		this.stopped  = false;
 
 		// throttledRefresh method buffers
 		this.throttledRefresh = _.debounce(this.refresh, THROTTLE_INTERVAL);
@@ -214,7 +213,7 @@ class LiveSelect extends EventEmitter {
 
 	stop() {
 		this.hashes.forEach(key => this.rowCache.remove(key));
-		this.stopped = true;
+		this.triggers.forEach(trigger => trigger.removeAllListeners());
 		this.removeAllListeners();
 	}
 }
