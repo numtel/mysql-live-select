@@ -13,7 +13,7 @@ global.printDebug = process.env.DEBUG !== undefined && process.env.DEBUG !== '0'
 global.printStats = process.env.STATS !== undefined && process.env.STATS !== '0';
 
 // ES6 may be used in all files required by this one
-require('6to5/register');
+require('babel/register');
 
 var _          = require('lodash');
 var pg         = require('pg');

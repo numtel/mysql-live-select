@@ -1,4 +1,3 @@
-var Q            = require('q');
 var _            = require('lodash');
 var EventEmitter = require('events').EventEmitter;
 
