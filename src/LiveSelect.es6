@@ -209,7 +209,7 @@ class LiveSelect extends EventEmitter {
 
 		remove.forEach(key => this.rowCache.remove(key));
 
-		this.emit('update', changes);
+		this.emit('update', filterHashProperties(changes));
 	}
 
 	stop() {
@@ -250,3 +250,11 @@ function getQueryTables(client, query, callback){
 }
 
 module.exports = LiveSelect;
+
+function filterHashProperties(diff) {
+	return diff.map(event => {
+		delete event[2]._hash;
+		if(event.length > 3) delete event[3]._hash;
+		return event;
+	});
+}

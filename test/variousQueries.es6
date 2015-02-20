@@ -17,7 +17,7 @@ _.forOwn(variousQueriesFixture.cases, (details, caseId) => {
 			var updateLog  = []; // Cache for any updates to this query
 			var nextLogPos = 0; // Length at last action performed
 
-			select.on('update', diff => updateLog.push(filterHashProperties(diff)));
+			select.on('update', diff => updateLog.push(diff));
 
 			// For each event, check values or perform action, then continue
 			var processEvents = (callback, index) => {
@@ -79,10 +79,3 @@ _.forOwn(variousQueriesFixture.cases, (details, caseId) => {
 	}
 })
 
-function filterHashProperties(diff) {
-	return diff.map(event => {
-		delete event[2]._hash;
-		if(event.length > 3) delete event[3]._hash;
-		return event;
-	});
-}
