@@ -25,9 +25,9 @@ exports.scoresLoad = function(test) {
 
 	printDebug && console.log('FIXTURE DATA\n', fixtureData);
 
-	scoresLoadFixture.install(fixtureData, (error, result) => {
-		if(error) throw error;
-
+	scoresLoadFixture.install(triggers, fixtureData)
+		.catch(error => console.error(error))
+		.then(result => {
 		var liveSelects = _.range(classCount).map(index =>
 			triggers.select(`
 				SELECT

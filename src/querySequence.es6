@@ -1,8 +1,11 @@
-// Execute a sequence of queries on a database connection
-// @param {object} client - The database client
-// @param {boolean} debug - Print queries as they execute (optional)
-// @param {[string]} queries - Queries to execute, in order
-// @param {function} callback - Call when complete (error, results)
+/**
+ * Execute a sequence of queries on a pg client in a transaction
+ * @param  Object   client   The database client
+ * @param  Boolean  debug    Print queries as they execute (optional)
+ * @param  [String] queries  Queries to execute, in order
+ * @param  Function callback Optional, call when complete (error, results)
+ * @return Promise
+ */
 module.exports = function(client, debug, queries, callback){
 	if(debug instanceof Array){
 		callback = queries;
@@ -10,18 +13,22 @@ module.exports = function(client, debug, queries, callback){
 		debug    = false;
 	}
 
-	if(queries.length === 0) return callback();
+	return new Promise((resolve, reject) => {
+		var results = [];
 
-	var results = [];
+		if(queries.length === 0) {
+			resolve();
+			return callback && callback();
+		}
 
-	client.query('BEGIN', (error, result) => {
-		if(error) return callback(error);
+		var sequence = queries.map((query, index, initQueries) => () => {
+			debug && console.log('QUERY', index, query);
 
-		var sequence = queries.map(function(query, index, initQueries){
-			var tmpCallback = function(error, rows, fields) {
+			var queryComplete = (error, rows, fields) => {
 				if(error) {
 					client.query('ROLLBACK', (rollbackError, result) => {
-						callback(rollbackError || error);
+						reject(rollbackError || error);
+						return callback && callback(rollbackError || error);
 					});
 				}
 
@@ -32,25 +39,31 @@ module.exports = function(client, debug, queries, callback){
 				}
 				else {
 					client.query('COMMIT', (error, result) => {
-						if(error) return callback(error);
-						return callback(null, results);
+						if(error) {
+							reject(error);
+							return callback && callback(error);
+						}
+						resolve(results);
+						return callback && callback(null, results);
 					});
 				}
-			};
+			}
 
-			return function(){
-				debug && console.log('Query Sequence', index, query);
-
-				if(query instanceof Array) {
-					client.query(query[0], query[1], tmpCallback);
-				}
-				else {
-					client.query(query, tmpCallback);
-				}
+			if(query instanceof Array) {
+				client.query(query[0], query[1], queryComplete);
+			}
+			else {
+				client.query(query, queryComplete);
 			}
 		});
 
-		sequence[0]();
-	});
-};
+		client.query('BEGIN', (error, result) => {
+			if(error) {
+				reject(error);
+				return callback && callback(error);
+			}
+			sequence[0]()
+		})
+	})
+}
 

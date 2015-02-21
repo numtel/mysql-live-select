@@ -40,7 +40,8 @@ function(classCount, assignPerClass, studentsPerClass, classesPerStudent) {
 		return {
 			id            : index + 1,
 			assignment_id : assignId,
-			student_id    : (baseStudent * studentsPerClass) + (index % studentsPerClass) + 1,
+			student_id    : (baseStudent * studentsPerClass) +
+			                (index % studentsPerClass) + 1,
 			score         : Math.ceil(Math.random() * assignments[assignId - 1].value)
 		}
 	});
@@ -48,52 +49,43 @@ function(classCount, assignPerClass, studentsPerClass, classesPerStudent) {
 	return { assignments, students, scores };
 };
 
-exports.install = function(generation, callback) {
-	var insertQuery = (table) => {
+function columnTypeFromName(name) {
+	switch(name){
+		case 'id'   : return 'serial NOT NULL';
+		case 'name' : return 'character varying(50) NOT NULL';
+		default     : return 'integer NOT NULL';
+	}
+}
+
+/**
+ * Create/replace test tables filled with fixture data
+ * @param  Object   generatation Output from generate() function above
+ * @return Promise
+ */
+exports.install = function(triggersInstance, generation) {
+	return Promise.all(_.map(generation, (rows, table) => {
 		var valueCount = 0;
-		return [
-			`INSERT INTO ${table}
-				(${_.keys(generation[table][0]).join(', ')})
-			 VALUES
-				${generation[table]
-					.map(row => `(
-						${_.map(row, () => '$' + ++valueCount).join(', ')}
-					)`).join(', ')}`,
-			 _.flatten(generation[table].map(row => _.values(row))) ];
-	};
 
-	// Reset PgTriggers trigger cache so that triggers are recreated if needed
-	delete triggers.triggerTables.students;
-	delete triggers.triggerTables.assignments;
-	delete triggers.triggerTables.scores;
+		// Reset PgTriggers trigger cache so that triggers are recreated if needed
+		delete triggersInstance.triggerTables[table];
 
-	// Create tables, Insert data
-	querySequence(client, [
-		`DROP TABLE IF EXISTS students CASCADE`,
-		`DROP TABLE IF EXISTS assignments CASCADE`,
-		`DROP TABLE IF EXISTS scores CASCADE`,
-		`CREATE TABLE students (
-			id serial NOT NULL,
-			name character varying(50) NOT NULL,
-			CONSTRAINT students_pkey PRIMARY KEY (id)
-		) WITH ( OIDS=FALSE )`,
-		`CREATE TABLE assignments (
-			id serial NOT NULL,
-			class_id integer NOT NULL,
-			name character varying(50),
-			value integer NOT NULL,
-			CONSTRAINT assignments_pkey PRIMARY KEY (id)
-		) WITH ( OIDS=FALSE )`,
-		`CREATE TABLE scores (
-			id serial NOT NULL,
-			assignment_id integer NOT NULL,
-			student_id integer NOT NULL,
-			score integer NOT NULL,
-			CONSTRAINT scores_pkey PRIMARY KEY (id)
-		) WITH ( OIDS=FALSE )`,
-		insertQuery('students'),
-		insertQuery('assignments'),
-		insertQuery('scores')
-	], callback);
-};
+		// Create tables, Insert data
+		return querySequence(client, [
+			`DROP TABLE IF EXISTS ${table} CASCADE`,
+
+			`CREATE TABLE ${table} (
+				${_.keys(rows[0])
+					.map(column => `${column} ${columnTypeFromName(column)}`).join(', ')},
+				CONSTRAINT ${table}_pkey PRIMARY KEY (id)
+			) WITH ( OIDS=FALSE )`,
+
+			[`INSERT INTO ${table}
+					(${_.keys(rows[0]).join(', ')})
+				 VALUES	${rows.map(row =>
+					`(${_.map(row, () => '$' + ++valueCount).join(', ')})`).join(', ')}`,
+			 _.flatten(rows.map(row => _.values(row))) ]
+		]);
+	}));
+
+}
 

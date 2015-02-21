@@ -8,7 +8,7 @@ class RowTrigger extends EventEmitter {
 		this.table = table;
 		this.ready = false;
 
-		var { channel, connect, triggerTables } = parent;
+		var { channel, triggerTables } = parent;
 
 		parent.on(`change:${table}`, this.forwardNotification.bind(this));
 
@@ -17,7 +17,7 @@ class RowTrigger extends EventEmitter {
 			var triggerName = `${channel}_${table}`;
 
 			triggerTables[table] = new Promise((resolve, reject) => {
-				connect((error, client, done) => {
+				parent.getClient((error, client, done) => {
 					if(error) return this.emit('error', error);
 
 					var sql = [

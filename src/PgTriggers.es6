@@ -1,4 +1,5 @@
 var _            = require('lodash');
+var pg           = require('pg');
 var EventEmitter = require('events').EventEmitter;
 
 var querySequence = require('./querySequence');
@@ -7,17 +8,22 @@ var RowTrigger    = require('./RowTrigger');
 var LiveSelect    = require('./LiveSelect');
 
 class PgTriggers extends EventEmitter {
-	constructor(connect, channel) {
-		this.connect       = connect;
-		this.channel       = channel;
-		this.rowCache      = new RowCache;
-		this.triggerTables = [];
+	constructor(connectionString, channel) {
+		this.connectionString = connectionString;
+		this.channel          = channel;
+		this.rowCache         = new RowCache;
+		this.triggerTables    = [];
+		this.notifyClient     = null;
+		this.notifyClientDone = null;
 
 		this.setMaxListeners(0); // Allow unlimited listeners
 
 		// Reserve one client to listen for notifications
 		this.getClient((error, client, done) => {
 			if(error) return this.emit('error', error);
+
+			this.notifyClient     = client;
+			this.notifyClientDone = done;
 
 			client.query(`LISTEN "${channel}"`, function(error, result) {
 				if(error) throw error;
@@ -32,19 +38,7 @@ class PgTriggers extends EventEmitter {
 	}
 
 	getClient(cb) {
-		if(this.client && this.done) {
-			cb(null, this.client, this.done);
-		}
-		else {
-			this.connect((error, client, done) => {
-				if(error) return this.emit('error', error);
-
-				this.client = client;
-				this.done   = done;
-
-				cb(null, this.client, this.done);
-			});
-		}
+		pg.connect(this.connectionString, cb);
 	}
 
 	createTrigger(table) {
@@ -71,8 +65,8 @@ class PgTriggers extends EventEmitter {
 			});
 
 			querySequence(client, queries, (error, result) => {
-				done();
-				callback(error, result);
+				this.notifyClientDone();
+				callback && callback(error, result);
 			});
 		});
 	}

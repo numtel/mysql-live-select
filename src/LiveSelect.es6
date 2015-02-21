@@ -14,20 +14,20 @@ const THROTTLE_INTERVAL = 1000;
 
 class LiveSelect extends EventEmitter {
 	constructor(parent, query, params) {
-		var { connect, channel, rowCache } = parent;
+		var { channel, rowCache } = parent;
 
-		this.query    = query;
-		this.params   = params || [];
-		this.connect  = connect;
-		this.rowCache = rowCache;
-		this.data     = [];
-		this.hashes   = [];
-		this.ready    = false;
+		this.parent    = parent;
+		this.query     = query;
+		this.params    = params || [];
+		this.rowCache  = rowCache;
+		this.data      = [];
+		this.hashes    = [];
+		this.ready     = false;
 
 		// throttledRefresh method buffers
 		this.throttledRefresh = _.debounce(this.refresh, THROTTLE_INTERVAL);
 
-		this.connect((error, client, done) => {
+		parent.getClient((error, client, done) => {
 			if(error) return this.emit('error', error);
 
 			getQueryTables(client, this.query, (error, tables) => {
@@ -58,6 +58,8 @@ class LiveSelect extends EventEmitter {
 	}
 
 	refresh() {
+		var { parent } = this;
+
 		// Run a query to get an updated hash map
 		var sql = `
 			WITH
@@ -73,7 +75,7 @@ class LiveSelect extends EventEmitter {
 				) tmp2
 		`;
 
-		this.connect((error, client, done) => {
+		parent.getClient((error, client, done) => {
 			if(error) return this.emit('error', error);
 
 			client.query(sql, this.params, (error, result) =>  {

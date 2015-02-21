@@ -10,72 +10,94 @@ _.forOwn(variousQueriesFixture.cases, (details, caseId) => {
 	exports['variousQueries_' + caseId] = function(test) {
 		printDebug && console.log('BEGINNING VARIOUS QUERY', caseId);
 
-		scoresLoadFixture.install(variousQueriesFixture.data, (error, result) => {
-			if(error) throw error;
+		// Modify table names in fixture data
+		var fixtureData = _.zipObject(
+			_.keys(variousQueriesFixture.data).map(table => `${table}_${caseId}`),
+			_.values(variousQueriesFixture.data)
+		);
 
-			var select     = triggers.select(details.query);
-			var updateLog  = []; // Cache for any updates to this query
-			var nextLogPos = 0; // Length at last action performed
+		// Modify table names in query
+		var query = applyTableSuffixes(details.query, caseId);
 
-			select.on('update', diff => updateLog.push(diff));
+		scoresLoadFixture.install(triggers, fixtureData)
+			.catch(error => console.error(error))
+			.then(result => {
+				var select     = triggers.select(query);
+				var updateLog  = []; // Cache for any updates to this query
+				var nextLogPos = 0; // Length at last action performed
 
-			// For each event, check values or perform action, then continue
-			var processEvents = (callback, index) => {
-				index = index || 0;
+				select.on('update', diff => updateLog.push(diff));
 
-				// Check if at end of event list
-				if(index === details.events.length) return callback();
+				// For each event, check values or perform action, then continue
+				var processEvents = (callback, index) => {
+					index = index || 0;
 
-				var event = details.events[index];
+					// Check if at end of event list
+					if(index === details.events.length) return callback();
 
-				_.forOwn(event, (data, eventType) => {
-					printDebug && console.log('EVENT', eventType, updateLog.length);
+					var event = details.events[index];
 
-					switch(eventType){
-						case 'perform':
-							nextLogPos = updateLog.length;
+					_.forOwn(event, (data, eventType) => {
+						printDebug && console.log('EVENT', eventType, updateLog.length);
 
-							querySequence(client, printDebug, data, (error, results) => {
-								if(error) throw error;
+						switch(eventType){
+							case 'perform':
+								nextLogPos = updateLog.length;
 
-								// Move to next event
-								processEvents(callback, index + 1);
-							});
-							break
-						case 'diff':
-							if(updateLog.length === nextLogPos) {
-								// No update yet since action
+								var queries =
+									data.map(query => applyTableSuffixes(query, caseId));
+
+								querySequence(client, printDebug, queries, (error, results) => {
+									if(error) throw error;
+
+									// Move to next event
+									processEvents(callback, index + 1);
+								});
+								break
+							case 'diff':
+								if(updateLog.length === nextLogPos) {
+									// No update yet since action
+									setTimeout(() => {
+										processEvents(callback, index);
+									}, 100);
+								}
+								else {
+									// New update has arrived, check against data or diff
+									test.deepEqual(updateLog[nextLogPos], data,
+										`Difference on event #${nextLogPos}`);
+
+									// Move to next event
+									processEvents(callback, index + 1);
+								}
+								break
+							case 'unchanged':
 								setTimeout(() => {
-									processEvents(callback, index);
-								}, 100);
-							}
-							else {
-								// New update has arrived, check against data or diff
-								test.deepEqual(updateLog[nextLogPos], data,
-									`Difference on event #${nextLogPos}`);
+									test.equal(updateLog.length, nextLogPos,
+										`Unexpected update on "unchanged" event #${nextLogPos}:
+											${JSON.stringify(updateLog[updateLog.length - 1])}`);
 
-								// Move to next event
-								processEvents(callback, index + 1);
-							}
-							break
-						case 'unchanged':
-							setTimeout(() => {
-								test.equal(updateLog.length, nextLogPos,
-									`Unexpected update on "unchanged" event #${nextLogPos}:
-										${JSON.stringify(updateLog[updateLog.length - 1])}`);
-
-								// Move to next event
-								processEvents(callback, index + 1);
-							}, data);
-							break
-						default:
-							throw new Error('Invalid event type: ' + eventType)
-							break
-					}
-				})
-			}
-			processEvents(() => { select.stop(); test.done() })
-		})
+									// Move to next event
+									processEvents(callback, index + 1);
+								}, data);
+								break
+							default:
+								throw new Error('Invalid event type: ' + eventType)
+								break
+						}
+					})
+				}
+				processEvents(() => { select.stop(); test.done() })
+			})
 	}
 })
 
+
+function applyTableSuffixes(originalQuery, suffix) {
+	return _.keys(variousQueriesFixture.data)
+		.map(table => {
+			return { find: table, replace: `${table}_${suffix}` }
+		})
+		.reduce((query, table) => {
+			return query.replace(new RegExp(table.find, 'g'), table.replace);
+		}, originalQuery);
+}
