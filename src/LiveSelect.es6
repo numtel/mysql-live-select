@@ -11,18 +11,13 @@ const THROTTLE_INTERVAL = 1000;
 
 class LiveSelect extends EventEmitter {
 	constructor(parent, query, params) {
-		var { channel, rowCache } = parent;
-
 		this.parent    = parent;
 		this.query     = query;
 		this.params    = params || [];
-		this.rowCache  = rowCache;
-		this.data      = [];
 		this.hashes    = [];
 		this.ready     = false;
 		this.triggers  = null;
 
-		// throttledRefresh method buffers
 		this.throttledRefresh = _.debounce(this.refresh, THROTTLE_INTERVAL);
 
 		parent.getQueryTables(this.query).then(tables => {
@@ -97,11 +92,11 @@ class LiveSelect extends EventEmitter {
 						newKey : change.rhs
 					});
 
-					if(this.rowCache.get(tmpChange.oldKey) === null) {
+					if(parent.rowCache.get(tmpChange.oldKey) === null) {
 						fetch[tmpChange.oldKey] = true;
 					}
 
-					if(this.rowCache.get(tmpChange.newKey) === null) {
+					if(parent.rowCache.get(tmpChange.newKey) === null) {
 						fetch[tmpChange.newKey] = true;
 					}
 				}
@@ -119,7 +114,7 @@ class LiveSelect extends EventEmitter {
 						tmpChange.key  = change.item.lhs;
 					}
 
-					if(this.rowCache.get(tmpChange.key) === null) {
+					if(parent.rowCache.get(tmpChange.key) === null) {
 						fetch[tmpChange.key] = true;
 					}
 				}
@@ -147,7 +142,7 @@ class LiveSelect extends EventEmitter {
 				`, this.params ]];
 
 				querySequence(parent, newCacheDataQuery).then(result => {
-					result[0].rows.forEach(row => this.rowCache.add(row._hash, row));
+					result[0].rows.forEach(row => parent.rowCache.add(row._hash, row));
 					this.update(changes);
 				}, error => this.emit('error', error));
 			}
@@ -155,6 +150,7 @@ class LiveSelect extends EventEmitter {
 	}
 
 	update(changes) {
+		var { parent } = this;
 		var remove = [];
 
 		// Emit an update event with the changes
@@ -162,17 +158,17 @@ class LiveSelect extends EventEmitter {
 			var args = [change.type];
 
 			if(change.type === 'added') {
-				var row = this.rowCache.get(change.key);
+				var row = parent.rowCache.get(change.key);
 				args.push(change.index, row);
 			}
 			else if(change.type === 'changed') {
-				var oldRow = this.rowCache.get(change.oldKey);
-				var newRow = this.rowCache.get(change.newKey);
+				var oldRow = parent.rowCache.get(change.oldKey);
+				var newRow = parent.rowCache.get(change.newKey);
 				args.push(change.index, oldRow, newRow);
 				remove.push(change.oldKey);
 			}
 			else if(change.type === 'removed') {
-				var row = this.rowCache.get(change.key);
+				var row = parent.rowCache.get(change.key);
 				args.push(change.index, row);
 				remove.push(change.key);
 			}
@@ -188,13 +184,14 @@ class LiveSelect extends EventEmitter {
 			return args;
 		});
 
-		remove.forEach(key => this.rowCache.remove(key));
+		remove.forEach(key => parent.rowCache.remove(key));
 
 		this.emit('update', filterHashProperties(changes));
 	}
 
 	stop() {
-		this.hashes.forEach(key => this.rowCache.remove(key));
+		var { parent } = this;
+		this.hashes.forEach(key => parent.rowCache.remove(key));
 		this.triggers.forEach(trigger => trigger.removeAllListeners());
 		this.removeAllListeners();
 	}
