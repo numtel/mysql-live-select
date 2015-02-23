@@ -1,32 +1,36 @@
 {
-  "name": "pg-notify-trigger",
-  "version": "0.0.1",
-  "description": "Trigger notify for specific row change events",
-  "main": "lib/PgTriggers.js",
-  "engines": {
-    "node": "0.10"
-  },
-  "directories": {
-    "test": "test"
-  },
-  "scripts": {
-    "start": "node ./lib/index.js",
-    "make": "6to5 src --out-dir lib",
-    "make-start": "npm run make && npm start",
-    "test": "CONN=\"postgres://meteor:meteor@127.0.0.1/meteor_test\" CHANNEL=\"package_test\" DEBUG=0 STATS=1 CLASS_COUNT=1 nodeunit test/index.js"
-  },
-  "keywords": [
-    "postgresql",
-    "notify"
-  ],
-  "author": "numtel <ben@latenightsketches.com>",
-  "license": "TBD",
-  "devDependencies": {
-    "6to5": "^3.4.0",
-    "nodeunit": "~0.9.0"
-  },
-  "dependencies": {
-    "pg"     : "^4.2.0",
-    "lodash" : "^3.1.0"
-  }
+	"name"        : "pg-notify-trigger",
+	"version"     : "0.0.1",
+	"description" : "Trigger notify for specific row change events",
+	"main"        : "lib/PgTriggers.js",
+	"author"      : "numtel <ben@latenightsketches.com>",
+	"license"     : "TBD",
+	"repository"  : "https://git.focus-sis.com/beng/pg-notify-trigger.git",
+
+	"engines": {
+		"node": "0.10"
+	},
+	"directories": {
+		"test": "test"
+	},
+	"scripts": {
+		"start"      : "node ./lib/index.js",
+		"make"       : "6to5 src --out-dir lib",
+		"make-start" : "npm run make && npm start",
+		"test"       : "CONN=\"postgres://meteor:meteor@127.0.0.1/meteor_test\" CHANNEL=\"package_test\" DEBUG=0 STATS=1 nodeunit test/index.js"
+	},
+	"keywords": [
+		"postgresql",
+		"notify"
+	],
+	"devDependencies": {
+		"babel"    : "^4.3.0",
+		"nodeunit" : "~0.9.0"
+	},
+	"dependencies": {
+		"pg"            : "^4.2.0",
+		"lodash"        : "^3.1.0",
+		"deep-diff"     : "^0.3.0",
+		"murmurhash-js" : "^1.0.0"
+	}
 }

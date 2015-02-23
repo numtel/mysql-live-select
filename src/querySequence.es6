@@ -1,55 +1,78 @@
-// Execute a sequence of queries on a database connection
-// @param {object} client - The database client
-// @param {boolean} debug - Print queries as they execute (optional)
-// @param {[string]} queries - Queries to execute, in order
-// @param {function} callback - Call when complete (error, results)
+/**
+ * Execute a sequence of queries on a pg client in a transaction
+ * @param  Object   client   The database client, or PgTriggers instance to
+ *                            obtain a client automatically
+ * @param  Boolean  debug    Print queries as they execute (optional)
+ * @param  [String] queries  Queries to execute, in order
+ * @param  Function callback Optional, call when complete (error, results)
+ * @return Promise
+ */
 module.exports = function(client, debug, queries, callback){
-  if(debug instanceof Array){
-    callback = queries;
-    queries = debug;
-    debug = false;
-  }
+	if(debug instanceof Array){
+		callback = queries;
+		queries  = debug;
+		debug    = false;
+	}
 
-  if(queries.length === 0) return callback();
+	return new Promise((resolve, reject) => {
+		var results = [];
 
-  var results = [];
+		if(typeof client.getClient === 'function'){
+			// PgTriggers instance passed as client, obtain client
+			return client.getClient((error, client, done) =>
+				module.exports(client, debug, queries, callback).then(
+					results => { done(); resolve(results) },
+					error => { done(); reject(error) }))
+		}
 
-  client.query('BEGIN', (error, result) => {
-    if(error) return callback(error);
+		if(queries.length === 0) {
+			resolve();
+			return callback && callback();
+		}
 
-    var sequence = queries.map(function(query, index, initQueries){
-      var tmpCallback = function(error, rows, fields) {
-        if(error) {
-          client.query('ROLLBACK', (rollbackError, result) => {
-            callback(rollbackError || error);
-          });
-        }
+		var sequence = queries.map((query, index, initQueries) => () => {
+			debug && console.log('QUERY', index, query);
 
-        results.push(rows);
+			var queryComplete = (error, rows, fields) => {
+				if(error) {
+					client.query('ROLLBACK', (rollbackError, result) => {
+						reject(rollbackError || error);
+						return callback && callback(rollbackError || error);
+					});
+				}
 
-        if(index < sequence.length - 1){
-          sequence[index + 1]();
-        }else{
-          client.query('COMMIT', (error, result) => {
-            if(error) return callback(error);
-            return callback(null, results);
-          });
-        }
-      };
+				results.push(rows);
 
-      return function(){
-        debug && console.log('Query Sequence', index, query);
+				if(index < sequence.length - 1) {
+					sequence[index + 1]();
+				}
+				else {
+					client.query('COMMIT', (error, result) => {
+						if(error) {
+							reject(error);
+							return callback && callback(error);
+						}
+						resolve(results);
+						return callback && callback(null, results);
+					});
+				}
+			}
 
-        if(query instanceof Array) {
-          client.query(query[0], query[1], tmpCallback);
-        }
-        else {
-          client.query(query, tmpCallback);
-        }
-      }
-    });
+			if(query instanceof Array) {
+				client.query(query[0], query[1], queryComplete);
+			}
+			else {
+				client.query(query, queryComplete);
+			}
+		});
 
-    sequence[0]();
-  });
-};
+		client.query('BEGIN', (error, result) => {
+			if(error) {
+				reject(error);
+				return callback && callback(error);
+			}
+			sequence[0]()
+		})
+	})
+}
 

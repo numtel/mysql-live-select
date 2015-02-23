@@ -1,128 +1,67 @@
 # pg-notify-trigger
 
-This node.js package/sample application provides notifications on row changes.
+This package exposes the `PgTriggers` class in order to provide realtime result sets for PostgreSQL `SELECT` statements.
 
-1. Run `npm install` to download dependent packages.
+## Implements
 
-2. Configure the database connection and query in `src/index.es6`.
+### PgTriggers Class
 
-3. Load `join-example.sql` into Postgres. Change the owner user from 'meteor', if needed.
+The `PgTriggers` constructor requires 2 arguments:
 
-4. Then run `npm run make-start` to build the ES6 files and start the app at index.js.
-
-* Configure test suite connection string in `package.json`, then run the suite with `npm run make && npm test`.
-
-## PgTriggers Class
-
-### constructor(conn, channel)
-
-Both arguments are required
-
-Argument | Type | Description
+Constructor Argument | Type | Description
 ---------|------|---------------------------
-`conn`     | `object` | Active `any-db` PostgreSQL connection
-`channel` | `string` | Unique identifier for this connection. Used as channel for `NOTIFY` commands as well as prefix for triggers, functions, and views.
+`connectionString` | `string` | ex. `postgres://user:pass@host/db`
+`channel` | `string` | Unique identifier for this connection. Used as channel for `NOTIFY` commands as well as prefix for triggers, functions, and views. Must follow SQL naming rules: may only contain `a-z`, `A-Z`, `0-9`, and `_` and not begin with a number.
 
-### createTrigger(table, payloadColumns) Method
+A single persistent client is used to listen for notifications. Result set refreshes obtain additional clients from the pool on-demand.
 
-Both arguments are required
+Each instance offers the following methods:
 
-Argument | Type | Description
----------|------|---------------------------
-`table` | `string` | Name of table to place trigger for any row change
-`payloadColumns` | `[string]` | Array of column names to include in change event payload
+Method Name | Returns | Description
+-------------|--------|---------------------
+`select(query, params)` | `LiveSelect` instance | Instantiate a live updating `SELECT` statement for a given query. Pass query string as first argument, `query`. Optionally, pass an array to the second arguments, `params`, with values for placeholders (e.g. `$1`).
+`cleanup(callback)` | `Promise` | Perform pre-shutdown cleanup of triggers, functions and any other temporary data. Optional argument `callback` requires function which accepts `error, result` arguments.
+`getClient(callback)` | *None* | Obtain a Postgres client from the pool. Required callback accepts `error`, `client`, and `done` arguments. From the [node-postgres wiki](https://github.com/brianc/node-postgres/wiki/pg): *If you do not call `done()` the client will never be returned to the pool and you will leak clients. This is mega-bad so always call `done()`.*
 
-Returns `RowTrigger` instance.
-
-### select(query, triggers) Method
-
-Both arguments are required
-
-Argument | Type | Description
----------|------|---------------------------
-`query` | `string` | SQL `SELECT` statement
-`triggers` | `object` | Description of when and how to refresh the query results, described below.
-
-> Parameters in the `query` argument must be escaped and inserted into the string. See [node-postgres Issue #440](https://github.com/brianc/node-postgres/issues/440) for more information.
-> 
-> **TODO** A Javascript function must be implemented in order to safely escape values.
-
-Returns `LiveSelect` instance.
-
-#### Trigger description object
-
-A `LiveSelect` trigger description object defines which tables (and which columns on those tables) to watch for changes as well has whether or not refresh the result set. If refreshing the result set, a selection to replace may be made.
-
-```javascript
-{
-  // For each table to watch, specify a lambda function with arguments
-  // matching the column names you need in order to determine if the query
-  // needs to be updated
-  table_name_to_watch: function(id, another_column) {
-    // Does change row's id column match myId variable?
-    return id === myId ? 
-      // Yes, refresh result set where column watcher_id matches id
-      { watcher_id : id } :
-      // No, do not refresh
-      false
-  }
-}
-```
-
-### cleanup(callback) method
-
-Perform pre-shutdown cleanup of triggers, functions and any other temporary data.
-
-Argument `callback` requires function which accepts `error, result` arguments.
-
-### Events Emitted
+The following events are emitted:
 
 Event Name | Arguments | Description
 ---------|------|---------------------------
-`change:<table_name>` | `payload` | A change notification has arrived for the specific table
+`change:<table_name>` | *None*  | A change notification has arrived for the specific table
 `error` | `error` | Unhandled exceptions will be thrown
 
 `PgTriggers` instances allow an unlimited number of event listeners.
 
-## LiveSelect Class
+### LiveSelect Class
 
-### constructor(parent, query, triggers)
+Instantiate a `LiveSelect` using the `PgTriggers.select()` method. Each instance offers the following methods:
 
-Parent must be `PgTriggers` instance.
+Method Name | Description
+-----------|-----------------------------
+`refresh()` | Update the result set immediately.
+`throttledRefresh()` | Same as `refresh` method except will not perform operations more frequently than 1 per second.
+`stop()` | Stop receiving updates on this instance.
 
-Other arguments defined above in the `PgTriggers.select` method definition.
-
-### refresh(condition) Method
-
-The `condition` argument is required.
-* Pass `true` to refresh entire result set
-* Or, pass an object defining a selection to replace by specifying the column name as the key with the accepted value as the value (e.g. To replace where column `assignment_id` is `7`, `{ assignment_id: 7 }`)
-
-### throttledRefresh(condition) Method
-
-Same as `refresh` method except will not perform operations faster than 1 per second
-
-### Events Emitted
+And emits the following events:
 
 Event Name | Arguments | Description
 ---------|------|---------------------------
-`update` | `diff`, `rows` | `rows` contains full data set
+`update` | `diff` | Array containing description of changes
+`ready` | *None* | All triggers have been installed, initial results to follow
 `error` | `error` | Unhandled exceptions will be thrown
 
+## Simple Example
 
-## RowTrigger Class
+1. Run `npm install` to download dependent packages.
 
-### constructor(parent, table, payloadColumns)
+2. Load `join-example.sql` into Postgres. Change the owner user from 'meteor', if needed.
 
-Parent must be `PgTriggers` instance.
+3. Configure the database connection string and query in `src/index2.es6`.
 
-Other arguments defined above in the `PgTriggers.createTrigger` method definition.
+4. Then run `npm run make && node lib/index2.js` to build the ES6 files and start the app at index2.js.
 
-### Events Emitted
+## Run Test Suite
 
-Event Name | Arguments | Description
----------|------|---------------------------
-`ready` | `results` | Triggers have been installed on the table
-`change` | `payload` | A row has changed on this table
-`error` | `error` | Unhandled exceptions will be thrown
+1. Configure connection string in `package.json`.
 
+2. Run the suite with `npm run make && npm test`.

@@ -1,341 +1,209 @@
-var EventEmitter = require('events').EventEmitter;
 var _            = require('lodash');
+var deep         = require('deep-diff');
+var EventEmitter = require('events').EventEmitter;
 
-var murmurHash    = require('../dist/murmurhash3_gc');
+var RowTrigger    = require('./RowTrigger');
 var querySequence = require('./querySequence');
-var cachedQueries = {};
 
-const THROTTLE_INTERVAL = 200;
-const MAX_CONDITIONS    = 3500;
+// Minimum duration in milliseconds between refreshing results
+// TODO: determine based on load
+// https://git.focus-sis.com/beng/pg-notify-trigger/issues/6
+const THROTTLE_INTERVAL = 1000;
 
 class LiveSelect extends EventEmitter {
-  constructor(parent, query, params) {
-    var { client, channel } = parent;
+	constructor(parent, query, params) {
+		this.parent    = parent;
+		this.query     = query;
+		this.params    = params || [];
+		this.hashes    = [];
+		this.ready     = false;
+		this.triggers  = null;
 
-    this.params = params;
-    this.client = client;
-    this.data   = {};
-    this.ready  = false;
+		this.throttledRefresh = _.debounce(this.refresh, THROTTLE_INTERVAL);
 
-    // throttledRefresh method buffers
-    this.refreshQueue     = [];
-    this.throttledRefresh = _.debounce(this.refresh, THROTTLE_INTERVAL);
+		parent.getQueryTables(this.query).then(tables => {
+			this.triggers = tables.map(table => new RowTrigger(parent, table));
 
-    // Create view for this query
-    addHelpers.call(this, query, (error, result) => {
-      if(error) return this.emit('error', error);
+			this.triggers.forEach(trigger => {
+				trigger.on('ready', () => {
+					// Check if all handlers are ready
+					var pending = this.triggers.filter(trigger => !trigger.ready);
 
-      var triggers     = {};
-      var aliases      = {};
-      var primary_keys = result.keys;
+					if(pending.length === 0) {
+						this.ready = true;
+						this.emit('ready');
 
-      result.columns.forEach((col) => {
-        if(!triggers[col.table]) {
-          triggers[col.table] = [];
-        }
+						// Grab initial results
+						this.refresh();
+					}
 
-        if(!aliases[col.table]) {
-          aliases[col.table] = {};
-        }
+				});
 
-        triggers[col.table].push(col.name);
-        aliases[col.table][col.name] = col.alias;
-      });
+				trigger.on('change', this.throttledRefresh.bind(this));
+			});
+		}, error => this.emit('error', error));
 
-      this.triggers = _.map(triggers,
-        (columns, table) => parent.createTrigger(table, columns));
+	}
 
-      this.aliases = aliases;
-      this.query   = result.query;
+	refresh() {
+		var { parent } = this;
 
-      this.listen();
+		var hashQueryPart = fullRow => `
+			SELECT
+				MD5(
+					CAST(tmp.* AS TEXT) ||
+					'${_.pluck(this.triggers, "table").join(",")}'
+				) AS _hash
+				${fullRow ? ', tmp.*' : ''}
+			FROM
+				tmp
+		`;
 
-      // Grab initial results
-      this.refresh(true);
-    });
-  }
+		// Run a query to get an updated hash map
+		var newHashesQuery = [[ `
+			WITH
+				tmp AS (${this.query})
+			SELECT
+				tmp2._hash
+			FROM (${hashQueryPart(false)}) tmp2
+		`, this.params ]];
 
-  listen() {
-    this.triggers.forEach((trigger) => {
-      trigger.on('change', (payload) => {
-        // Update events contain both old and new values in payload
-        // using 'new_' and 'old_' prefixes on the column names
-        var argVals = {};
+		querySequence(parent, newHashesQuery).then(result => {
+			var freshHashes = _.pluck(result[0].rows, '_hash');
+			var diff   = deep.diff(this.hashes, freshHashes);
+			var fetch  = {};
 
-        if(payload._op === 'UPDATE') {
-          trigger.payloadColumns.forEach((col) => {
-            if(payload[`new_${col}`] !== payload[`old_${col}`]) {
-              argVals[col] = payload[`new_${col}`];
-            }
-          });
-        }
-        else {
-          trigger.payloadColumns.forEach((col) => {
-            argVals[col] = payload[col];
-          });
-        }
+			// Store the new hash map
+			this.hashes = freshHashes;
 
-        // Generate a map denoting which rows to replace
-        var tmpRow = {};
+			// If nothing has changed, stop here
+			if(!diff || !diff.length) {
+				return;
+			}
 
-        _.forOwn(argVals, (value, column) => {
-          var alias = this.aliases[trigger.table][column];
-          tmpRow[alias] = value;
-        });
+			// Build a list of changes and hashes to fetch
+			var changes = diff.map(change => {
+				var tmpChange = {};
 
-        if(!_.isEmpty(tmpRow)) {
-          this.refreshQueue.push(tmpRow);
+				if(change.kind === 'E') {
+					_.extend(tmpChange, {
+						type   : 'changed',
+						index  : change.path.pop(),
+						oldKey : change.lhs,
+						newKey : change.rhs
+					});
 
-          if(MAX_CONDITIONS && this.refreshQueue.length >= MAX_CONDITIONS) {
-            this.refresh();
-          }
-          else {
-            this.throttledRefresh();
-          }
-        }
-      });
+					if(parent.rowCache.get(tmpChange.oldKey) === null) {
+						fetch[tmpChange.oldKey] = true;
+					}
 
-      trigger.on('ready', (results) => {
-        // Check if all handlers are ready
-        if(this.triggers.filter(trigger => !trigger.ready).length === 0) {
-          this.ready = true;
-          this.emit('ready', results);
-        }
-      });
-    });
-  }
+					if(parent.rowCache.get(tmpChange.newKey) === null) {
+						fetch[tmpChange.newKey] = true;
+					}
+				}
+				else if(change.kind === 'A') {
+					_.extend(tmpChange, {
+						index : change.index
+					})
 
-  refresh(initial) {
-    var params = this.params.slice(), where;
+					if(change.item.kind === 'N') {
+						tmpChange.type = 'added';
+						tmpChange.key  = change.item.rhs;
+					}
+					else {
+						tmpChange.type = 'removed';
+						tmpChange.key  = change.item.lhs;
+					}
 
-    if(initial) {
-      where = '';
-    }
-    else if(this.refreshQueue.length) {
-      // Build WHERE clause if not refreshing entire result set
-      var valueCount = params.length;
+					if(parent.rowCache.get(tmpChange.key) === null) {
+						fetch[tmpChange.key] = true;
+					}
+				}
+				else {
+					throw new Error(`Unrecognized change: ${JSON.stringify(change)}`);
+				}
 
-      where = 'WHERE ' +
-        this.refreshQueue.map((condition) => '(' +
-          _.map(condition, (value, column) => {
-            params.push(value);
-            return `${column} = $${++valueCount}`
-          }).join(' AND ') + ')'
-        ).join(' OR ');
+				return tmpChange;
+			});
 
-      this.refreshQueue = [];
-    }
-    else {
-      return; // Do nothing if there are no conditions
-    }
+			if(_.isEmpty(fetch)) {
+				this.update(changes);
+			}
+			else {
+				// Fetch hashes that aren't in the cache
+				var newCacheDataQuery = [[ `
+					WITH
+						tmp AS (${this.query})
+					SELECT
+						tmp2.*
+					FROM
+						(${hashQueryPart(true)}) tmp2
+					WHERE
+						tmp2._hash IN ('${_.keys(fetch).join("', '")}')
+				`, this.params ]];
 
-    var sql = `
-      WITH tmp AS (${this.query})
-      SELECT *
-      FROM tmp
-      ${where}
-    `;
+				querySequence(parent, newCacheDataQuery).then(result => {
+					result[0].rows.forEach(row => parent.rowCache.add(row._hash, row));
+					this.update(changes);
+				}, error => this.emit('error', error));
+			}
+		}, error => this.emit('error', error));
+	}
 
-    this.client.query(sql, params, (error, result) =>  {
-      if(error) return this.emit('error', error);
+	update(changes) {
+		var { parent } = this;
+		var remove = [];
 
-      this.update(result.rows);
-    });
-  }
+		// Emit an update event with the changes
+		var changes = changes.map(change => {
+			var args = [change.type];
 
-  update(rows) {
-    var diff = [];
+			if(change.type === 'added') {
+				var row = parent.rowCache.get(change.key);
+				args.push(change.index, row);
+			}
+			else if(change.type === 'changed') {
+				var oldRow = parent.rowCache.get(change.oldKey);
+				var newRow = parent.rowCache.get(change.newKey);
+				args.push(change.index, oldRow, newRow);
+				remove.push(change.oldKey);
+			}
+			else if(change.type === 'removed') {
+				var row = parent.rowCache.get(change.key);
+				args.push(change.index, row);
+				remove.push(change.key);
+			}
 
-    // Handle added/changed rows
-    rows.forEach((row) => {
-      var id = row._id;
+			if(args[2] === null){
+				return this.emit('error', new Error(
+					'CACHE_MISS: ' + (args.length === 3 ? change.key : change.oldKey)));
+			}
+			if(args.length > 3 && args[3] === null){
+				return this.emit('error', new Error('CACHE_MISS: ' + change.newKey));
+			}
 
-      if(this.data[id]) {
-        // If this row existed in the result set,
-        // check to see if anything has changed
-        var hasDiff = false;
+			return args;
+		});
 
-        for(var col in this.data[id]) {
-          if(this.data[id][col] !== row[col]) {
-            hasDiff = true;
-            break;
-          }
-        }
+		remove.forEach(key => parent.rowCache.remove(key));
 
-        hasDiff && diff.push(['changed', this.data[id], row]);
-      }
-      else {
-        // Otherwise, it was added
-        diff.push(['added', row]);
-      }
+		this.emit('update', filterHashProperties(changes));
+	}
 
-      this.data[id] = row;
-    });
-
-    // Check to see if there are any
-    // IDs that have been removed
-    // TODO: remove columns that are not in the original
-    // query from the published rows. (Perhaps keeping _id?)
-    // https://git.focus-sis.com/beng/pg-notify-trigger/issues/1
-    var existingIds = _.keys(this.data);
-
-    if(existingIds.length) {
-      var sql = `
-        WITH tmp AS (${this.query})
-        SELECT id
-        FROM UNNEST(ARRAY['${_.keys(this.data).join("', '")}']) id
-        LEFT JOIN tmp ON tmp._id = id
-        WHERE tmp._id IS NULL
-      `;
-
-      var query = {
-        name   : `prepared_${murmurHash(sql)}`,
-        text   : sql,
-        values : this.params
-      };
-
-      // Get any IDs that have been removed
-      this.client.query(query, (error, result) => {
-        if(error) return this.emit('error', error);
-
-        result.rows.forEach((row) => {
-          var oldRow = this.data[row.id];
-
-          diff.push(['removed', oldRow]);
-          delete this.data[row.id];
-        });
-
-        if(diff.length !== 0){
-          // Output all difference events in a single event
-          this.emit('update', diff, this.data);
-        }
-      });
-    }
-    else if(diff.length !== 0){
-      // Output all difference events in a single event
-      this.emit('update', diff, this.data);
-    }
-  }
-
-  flush() {
-    if(this.refreshQueue.length) {
-      refresh(this.refreshQueue);
-      this.refreshQueue = [];
-    }
-  }
-}
-
-/**
- * Adds helper columns to a query
- * @context LiveSelect instance
- * @param   String   query    The query
- * @param   Function callback A function that is called with information about the view
- */
-function addHelpers(query, callback) {
-  var hash = murmurHash(query);
-
-  // If this query was cached before, reuse it
-  if(cachedQueries[hash]) {
-    return callback(null, cachedQueries[hash]);
-  }
-
-  var tmpName = `tmp_view_${hash}`;
-
-  var columnUsageSQL = `
-    SELECT DISTINCT
-      vc.table_name,
-      vc.column_name
-    FROM
-      information_schema.view_column_usage vc
-    WHERE
-      view_name = $1
-  `;
-
-  var tableUsageSQL = `
-    SELECT DISTINCT
-      vt.table_name,
-      cc.column_name
-    FROM
-      information_schema.view_table_usage vt JOIN
-      information_schema.table_constraints tc ON
-        tc.table_catalog = vt.table_catalog AND
-        tc.table_schema = vt.table_schema AND
-        tc.table_name = vt.table_name AND
-        tc.constraint_type = 'PRIMARY KEY' JOIN
-      information_schema.constraint_column_usage cc ON
-        cc.table_catalog = tc.table_catalog AND
-        cc.table_schema = tc.table_schema AND
-        cc.table_name = tc.table_name AND
-        cc.constraint_name = tc.constraint_name
-    WHERE
-      view_name = $1
-  `;
-
-  // Replace all parameter values with NULL
-  var tmpQuery      = query.replace(/\$\d/g, 'NULL');
-  var createViewSQL = `CREATE OR REPLACE TEMP VIEW ${tmpName} AS (${tmpQuery})`;
-
-  var columnUsageQuery = {
-    name   : 'column_usage_query',
-    text   : columnUsageSQL,
-    values : [tmpName]
-  };
-
-  var tableUsageQuery = {
-    name   : 'table_usage_query',
-    text   : tableUsageSQL,
-    values : [tmpName]
-  };
-
-  var sql = [
-    `CREATE OR REPLACE TEMP VIEW ${tmpName} AS (${tmpQuery})`,
-    tableUsageQuery,
-    columnUsageQuery
-  ];
-
-  // Create a temporary view to figure out what columns will be used
-  querySequence(this.client, sql, (error, result) => {
-    if(error) return callback.call(this, error);
-
-    var tableUsage  = result[1].rows;
-    var columnUsage = result[2].rows;
-
-    var keys    = {};
-    var columns = [];
-
-    tableUsage.forEach((row, index) => {
-      keys[row.table_name] = row.column_name;
-    });
-
-    // This might not be completely reliable
-    var pattern = /SELECT([\s\S]+)FROM/;
-
-    columnUsage.forEach((row, index) => {
-      columns.push({
-        table : row.table_name,
-        name  : row.column_name,
-        alias : `_${row.table_name}_${row.column_name}`
-      });
-    });
-
-    var keySql = _.map(keys,
-      (value, key) => `CONCAT('${key}', ':', "${key}"."${value}")`);
-
-    var columnSql = _.map(columns,
-      (col, index) => `"${col.table}"."${col.name}" AS ${col.alias}`);
-
-    query = query.replace(pattern, `
-      SELECT
-        CONCAT(${keySql.join(", '|', ")}) AS _id,
-        ${columnSql},
-        $1
-      FROM
-    `);
-
-    cachedQueries[hash] = { keys, columns, query };
-
-    return callback(null, cachedQueries[hash]);
-  });
+	stop() {
+		var { parent } = this;
+		this.hashes.forEach(key => parent.rowCache.remove(key));
+		this.triggers.forEach(trigger => trigger.removeAllListeners());
+		this.removeAllListeners();
+	}
 }
 
 module.exports = LiveSelect;
+
+function filterHashProperties(diff) {
+	return diff.map(event => {
+		delete event[2]._hash;
+		if(event.length > 3) delete event[3]._hash;
+		return event;
+	});
+}
