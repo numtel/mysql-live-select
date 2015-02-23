@@ -3,13 +3,7 @@ var testCount = 0;
 module.exports = {
 	setUp: function(done) {
 		testCount++;
-
-		var checkReady = function() {
-			if('client' in global) done();
-			else setTimeout(checkReady, 30);
-		};
-
-		checkReady();
+		done()
 	},
 
 	tearDown: function(done) {
@@ -18,12 +12,7 @@ module.exports = {
 
 		setTimeout(function(){
 			if(startCount === testCount){
-				triggers.cleanup(function(error, results) {
-					if(error) throw error;
-
-					clientDone();
-					process.exit();
-				});
+				triggers.cleanup().then(process.exit);
 			}
 		}, 1000);
 

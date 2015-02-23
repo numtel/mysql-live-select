@@ -70,7 +70,7 @@ exports.install = function(triggersInstance, generation) {
 		delete triggersInstance.triggerTables[table];
 
 		// Create tables, Insert data
-		return querySequence(client, [
+		return querySequence(triggersInstance, [
 			`DROP TABLE IF EXISTS ${table} CASCADE`,
 
 			`CREATE TABLE ${table} (

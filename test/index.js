@@ -18,15 +18,8 @@ require('babel/register');
 var _          = require('lodash');
 var PgTriggers = require('../');
 
-// Define global instances
+// Define global instance
 global.triggers   = new PgTriggers(process.env.CONN, process.env.CHANNEL);
-
-triggers.getClient(function(error, client, done){
-	if(error) throw error;
-
-	global.client     = client;
-	global.clientDone = done;
-});
 
 module.exports = _.assign(
 	require('./helpers/lifecycle'),

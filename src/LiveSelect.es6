@@ -2,10 +2,7 @@ var _            = require('lodash');
 var deep         = require('deep-diff');
 var EventEmitter = require('events').EventEmitter;
 
-var murmurHash    = require('murmurhash-js').murmur3;
 var querySequence = require('./querySequence');
-
-var cachedQueryTables = {};
 
 // Minimum duration in milliseconds between refreshing results
 // TODO: determine based on load
@@ -23,154 +20,138 @@ class LiveSelect extends EventEmitter {
 		this.data      = [];
 		this.hashes    = [];
 		this.ready     = false;
+		this.triggers  = null;
 
 		// throttledRefresh method buffers
 		this.throttledRefresh = _.debounce(this.refresh, THROTTLE_INTERVAL);
 
-		parent.getClient((error, client, done) => {
-			if(error) return this.emit('error', error);
+		parent.getQueryTables(this.query).then(tables => {
+			this.triggers = tables.map(table => parent.createTrigger(table));
 
-			getQueryTables(client, this.query, (error, tables) => {
-				if(error) return this.emit('error', error);
+			this.triggers.forEach(trigger => {
+				trigger.on('ready', () => {
+					// Check if all handlers are ready
+					var pending = this.triggers.filter(trigger => !trigger.ready);
 
-				this.triggers = tables.map(table => parent.createTrigger(table));
+					if(pending.length === 0) {
+						this.ready = true;
+						this.emit('ready');
 
-				this.triggers.forEach(trigger => {
-					trigger.on('ready', () => {
-						// Check if all handlers are ready
-						var pending = this.triggers.filter(trigger => !trigger.ready);
+						// Grab initial results
+						this.refresh();
+					}
 
-						if(pending.length === 0) {
-							this.ready = true;
-							this.emit('ready');
-						}
-
-						trigger.on('change', this.throttledRefresh.bind(this));
-					});
 				});
 
-				done();
+				trigger.on('change', this.throttledRefresh.bind(this));
 			});
-		});
+		}, error => this.emit('error', error));
 
-		// Grab initial results
-		this.refresh();
 	}
 
 	refresh() {
 		var { parent } = this;
 
+		var hashQueryPart = fullRow => `
+			SELECT
+				MD5(
+					CAST(tmp.* AS TEXT) ||
+					'${_.pluck(this.triggers, "table").join(",")}'
+				) AS _hash
+				${fullRow ? ', tmp.*' : ''}
+			FROM
+				tmp
+		`;
+
 		// Run a query to get an updated hash map
-		var sql = `
+		var newHashesQuery = [[ `
 			WITH
 				tmp AS (${this.query})
 			SELECT
 				tmp2._hash
-			FROM
-				(
-					SELECT
-						MD5(CAST(tmp.* AS TEXT)) AS _hash
-					FROM
-						tmp
-				) tmp2
-		`;
+			FROM (${hashQueryPart(false)}) tmp2
+		`, this.params ]];
 
-		parent.getClient((error, client, done) => {
-			if(error) return this.emit('error', error);
+		querySequence(parent, newHashesQuery).then(result => {
+			var freshHashes = _.pluck(result[0].rows, '_hash');
+			var diff   = deep.diff(this.hashes, freshHashes);
+			var fetch  = {};
 
-			client.query(sql, this.params, (error, result) =>  {
-				if(error) return this.emit('error', error);
+			// Store the new hash map
+			this.hashes = freshHashes;
 
-				var freshHashes = _.pluck(result.rows, '_hash');
-				var diff   = deep.diff(this.hashes, freshHashes);
-				var fetch  = {};
+			// If nothing has changed, stop here
+			if(!diff || !diff.length) {
+				return;
+			}
 
-				// Store the new hash map
-				this.hashes = freshHashes;
+			// Build a list of changes and hashes to fetch
+			var changes = diff.map(change => {
+				var tmpChange = {};
 
-				// If nothing has changed, stop here
-				if(!diff || !diff.length) {
-					return;
-				}
+				if(change.kind === 'E') {
+					_.extend(tmpChange, {
+						type   : 'changed',
+						index  : change.path.pop(),
+						oldKey : change.lhs,
+						newKey : change.rhs
+					});
 
-				// Build a list of changes and hashes to fetch
-				var changes = diff.map(change => {
-					var tmpChange = {};
-
-					if(change.kind === 'E') {
-						_.extend(tmpChange, {
-							type   : 'changed',
-							index  : change.path.pop(),
-							oldKey : change.lhs,
-							newKey : change.rhs
-						});
-
-						if(this.rowCache.get(tmpChange.oldKey) === null) {
-							fetch[tmpChange.oldKey] = true;
-						}
-
-						if(this.rowCache.get(tmpChange.newKey) === null) {
-							fetch[tmpChange.newKey] = true;
-						}
+					if(this.rowCache.get(tmpChange.oldKey) === null) {
+						fetch[tmpChange.oldKey] = true;
 					}
-					else if(change.kind === 'A') {
-						_.extend(tmpChange, {
-							index : change.index
-						})
 
-						if(change.item.kind === 'N') {
-							tmpChange.type = 'added';
-							tmpChange.key  = change.item.rhs;
-						}
-						else {
-							tmpChange.type = 'removed';
-							tmpChange.key  = change.item.lhs;
-						}
+					if(this.rowCache.get(tmpChange.newKey) === null) {
+						fetch[tmpChange.newKey] = true;
+					}
+				}
+				else if(change.kind === 'A') {
+					_.extend(tmpChange, {
+						index : change.index
+					})
 
-						if(this.rowCache.get(tmpChange.key) === null) {
-							fetch[tmpChange.key] = true;
-						}
+					if(change.item.kind === 'N') {
+						tmpChange.type = 'added';
+						tmpChange.key  = change.item.rhs;
 					}
 					else {
-						throw new Error(`Unrecognized change: ${JSON.stringify(change)}`);
+						tmpChange.type = 'removed';
+						tmpChange.key  = change.item.lhs;
 					}
 
-					return tmpChange;
-				});
-
-				if(_.isEmpty(fetch)) {
-					done();
-					this.update(changes);
+					if(this.rowCache.get(tmpChange.key) === null) {
+						fetch[tmpChange.key] = true;
+					}
 				}
 				else {
-					var sql = `
-						WITH
-							tmp AS (${this.query})
-						SELECT
-							tmp2.*
-						FROM
-							(
-								SELECT
-									MD5(CAST(tmp.* AS TEXT)) AS _hash,
-									tmp.*
-								FROM
-									tmp
-							) tmp2
-						WHERE
-							tmp2._hash IN ('${_.keys(fetch).join("', '")}')
-					`;
-
-					// Fetch hashes that aren't in the cache
-					client.query(sql, this.params, (error, result) => {
-						if(error) return this.emit('error', error);
-
-						result.rows.forEach(row => this.rowCache.add(row._hash, row));
-						done();
-						this.update(changes);
-					});
+					throw new Error(`Unrecognized change: ${JSON.stringify(change)}`);
 				}
+
+				return tmpChange;
 			});
-		});
+
+			if(_.isEmpty(fetch)) {
+				this.update(changes);
+			}
+			else {
+				// Fetch hashes that aren't in the cache
+				var newCacheDataQuery = [[ `
+					WITH
+						tmp AS (${this.query})
+					SELECT
+						tmp2.*
+					FROM
+						(${hashQueryPart(true)}) tmp2
+					WHERE
+						tmp2._hash IN ('${_.keys(fetch).join("', '")}')
+				`, this.params ]];
+
+				querySequence(parent, newCacheDataQuery).then(result => {
+					result[0].rows.forEach(row => this.rowCache.add(row._hash, row));
+					this.update(changes);
+				}, error => this.emit('error', error));
+			}
+		}, error => this.emit('error', error));
 	}
 
 	update(changes) {
@@ -217,36 +198,6 @@ class LiveSelect extends EventEmitter {
 		this.triggers.forEach(trigger => trigger.removeAllListeners());
 		this.removeAllListeners();
 	}
-}
-
-function getQueryTables(client, query, callback){
-	var queryHash = murmurHash(query);
-
-	// If this query was cached before, reuse it
-	if(cachedQueryTables[queryHash]) {
-		return callback(null, cachedQueryTables[queryHash]);
-	}
-
-	// Replace all parameter values with NULL
-	var tmpQuery = query.replace(/\$\d/g, 'NULL');
-	var tmpName  = `tmp_view_${queryHash}`;
-
-	var sql = [
-		`CREATE OR REPLACE TEMP VIEW ${tmpName} AS (${tmpQuery})`,
-		[`SELECT DISTINCT vc.table_name
-			FROM information_schema.view_column_usage vc
-			WHERE view_name = $1`, [ tmpName ] ],
-	];
-
-	querySequence(client, sql, (error, result) => {
-		if(error) return callback(error);
-
-		var tables = result[1].rows.map(row => row.table_name);
-
-		cachedQueryTables[queryHash] = tables;
-
-		callback(null, tables);
-	});
 }
 
 module.exports = LiveSelect;

@@ -1,6 +1,7 @@
 /**
  * Execute a sequence of queries on a pg client in a transaction
- * @param  Object   client   The database client
+ * @param  Object   client   The database client, or PgTriggers instance to
+ *                            obtain a client automatically
  * @param  Boolean  debug    Print queries as they execute (optional)
  * @param  [String] queries  Queries to execute, in order
  * @param  Function callback Optional, call when complete (error, results)
@@ -15,6 +16,14 @@ module.exports = function(client, debug, queries, callback){
 
 	return new Promise((resolve, reject) => {
 		var results = [];
+
+		if(typeof client.getClient === 'function'){
+			// PgTriggers instance passed as client, obtain client
+			return client.getClient((error, client, done) =>
+				module.exports(client, debug, queries, callback).then(
+					results => { done(); resolve(results) },
+					error => { done(); reject(error) }))
+		}
 
 		if(queries.length === 0) {
 			resolve();
