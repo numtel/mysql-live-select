@@ -2,6 +2,7 @@ var _            = require('lodash');
 var deep         = require('deep-diff');
 var EventEmitter = require('events').EventEmitter;
 
+var RowTrigger    = require('./RowTrigger');
 var querySequence = require('./querySequence');
 
 // Minimum duration in milliseconds between refreshing results
@@ -21,7 +22,7 @@ class LiveSelect extends EventEmitter {
 		this.throttledRefresh = _.debounce(this.refresh, THROTTLE_INTERVAL);
 
 		parent.getQueryTables(this.query).then(tables => {
-			this.triggers = tables.map(table => parent.createTrigger(table));
+			this.triggers = tables.map(table => new RowTrigger(parent, table));
 
 			this.triggers.forEach(trigger => {
 				trigger.on('ready', () => {

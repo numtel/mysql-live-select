@@ -3,10 +3,9 @@ var pg           = require('pg');
 var EventEmitter = require('events').EventEmitter;
 var murmurHash    = require('murmurhash-js').murmur3;
 
-var querySequence = require('./querySequence');
 var RowCache      = require('./RowCache');
-var RowTrigger    = require('./RowTrigger');
 var LiveSelect    = require('./LiveSelect');
+var querySequence = require('./querySequence');
 
 class PgTriggers extends EventEmitter {
 	constructor(connectionString, channel) {
@@ -41,10 +40,6 @@ class PgTriggers extends EventEmitter {
 
 	getClient(cb) {
 		pg.connect(this.connectionString, cb);
-	}
-
-	createTrigger(table) {
-		return new RowTrigger(this, table);
 	}
 
 	select(query, params) {
