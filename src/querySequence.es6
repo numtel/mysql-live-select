@@ -39,6 +39,7 @@ module.exports = function(client, debug, queries, callback){
 						reject(rollbackError || error);
 						return callback && callback(rollbackError || error);
 					});
+					return;
 				}
 
 				results.push(rows);
