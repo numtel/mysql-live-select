@@ -27,7 +27,7 @@ class PgTriggers extends EventEmitter {
 			this.notifyClientDone = done;
 
 			client.query(`LISTEN "${channel}"`, function(error, result) {
-				if(error) throw error;
+				if(error) this.emit('error', error);
 			});
 
 			client.on('notification', (info) => {

@@ -120,7 +120,8 @@ class LiveSelect extends EventEmitter {
 					}
 				}
 				else {
-					throw new Error(`Unrecognized change: ${JSON.stringify(change)}`);
+					this.emit('error',
+						new Error(`Unrecognized change: ${JSON.stringify(change)}`));
 				}
 
 				return tmpChange;
