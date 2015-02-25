@@ -50,53 +50,71 @@ class LiveSelect extends EventEmitter {
 									cur_results AS (${query}),
 									cur_hashes AS (
 										SELECT
-											MD5(CAST(cur_results.* AS TEXT)) AS _hash
+											MD5(CAST(ROW_TO_JSON(cur_results.*) AS TEXT)) AS _hash
 										FROM
 											cur_results),
-									removed_hashes AS (
+									old_hashes AS (
 										SELECT
 											UNNEST(row_hashes) AS _hash
 										FROM
 											${parent.hashTable}
 										WHERE
-											query_hash = ${this.queryHash}
+											query_hash = ${this.queryHash}),
+									removed_hashes AS (
+										SELECT * FROM old_hashes
 										EXCEPT SELECT * FROM cur_hashes),
 									new_data AS (
-										SELECT row_to_json(tmp3.*) AS row_json
+										SELECT ROW_TO_JSON(tmp3.*) AS row_json
 											FROM
 												(SELECT
-													MD5(CAST(cur_results.* AS TEXT)) AS _hash,
+													MD5(CAST(ROW_TO_JSON(cur_results.*) AS TEXT)) AS _hash,
 													cur_results.*
 												FROM cur_results) AS tmp3
 										WHERE
 											_hash IN (
 												SELECT * FROM cur_hashes
-												EXCEPT SELECT
-													unnest(row_hashes) AS _hash
-												FROM
-													${parent.hashTable}
-												WHERE query_hash = ${this.queryHash})),
+												EXCEPT SELECT * FROM old_hashes)),
 									update_hashes AS (
 										UPDATE
 											${parent.hashTable}
 										SET
 											row_hashes =
-												(SELECT array_agg(cur_hashes._hash)	FROM cur_hashes)
+												(SELECT ARRAY_AGG(cur_hashes._hash)	FROM cur_hashes)
 										WHERE
-											query_hash = ${this.queryHash})
+											query_hash = ${this.queryHash}),
+									removed_hashes_prep AS (
+										SELECT
+											${this.queryHash} AS query_hash,
+											JSON_AGG(removed_hashes._hash) AS removed
+										FROM
+											removed_hashes),
+									new_data_prep AS (
+										SELECT
+											${this.queryHash} AS query_hash,
+											JSON_AGG(new_data.row_json) AS added
+										FROM
+											new_data),
+									joined_prep AS (
+										SELECT
+											removed_hashes_prep.removed,
+											new_data_prep.added
+										INTO
+											notify_data
+										FROM
+											removed_hashes_prep
+										JOIN new_data_prep ON
+											(removed_hashes_prep.query_hash = new_data_prep.query_hash))
 								SELECT
-									CAST(JSON_AGG(removed_hashes._hash) AS TEXT) ||
-									CAST(JSON_AGG(new_data.row_json) AS TEXT)
-								INTO
-									notify_data
+									JSON_AGG(joined_prep.*)
 								FROM
-									removed_hashes, new_data;
+									joined_prep;
 
 								RETURN notify_data;
 							END;
 						$$ LANGUAGE PLPGSQL
 					`, this.params),
-					`SELECT ${this.updateFunction}()` ]).then(resolve, reject)
+					`SELECT ${this.updateFunction}()` ])
+						.then(results => resolve(results[2].rows), reject)
 				}, reject)
 			}).catch(error => this.emit('error', error))
 		}

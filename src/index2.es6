@@ -5,6 +5,8 @@ const CHANNEL = 'ben_test';
 
 var triggers = new PgTriggers(CONN_STR, CHANNEL);
 
+triggers.on('error', err => console.log(err));
+
 var mySelect = triggers.select(`
 	SELECT
 		students.name  AS student_name,

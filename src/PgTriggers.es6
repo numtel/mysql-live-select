@@ -59,9 +59,11 @@ class PgTriggers extends EventEmitter {
 	select(query, params) {
 		var newSelect = new LiveSelect(this, query, params);
 		newSelect.init.then(result => {
+			// TODO initial result handling
+			newSelect.update(result);
 			this.registerQueryTriggers(newSelect.query, newSelect.updateFunction)
 				.then(tables => { newSelect.tablesUsed = tables });
-		});
+		}, error => this.emit('error', error));
 		return newSelect
 	}
 
