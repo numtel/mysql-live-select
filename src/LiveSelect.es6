@@ -50,13 +50,13 @@ class LiveSelect extends EventEmitter {
 									cur_results AS (${query}),
 									cur_hashes AS (
 										SELECT
-											ROW_NUMBER() OVER (),
+											ROW_NUMBER() OVER () AS _index,
 											MD5(CAST(ROW_TO_JSON(cur_results.*) AS TEXT)) AS _hash
 										FROM
 											cur_results),
 									old_hashes AS (
 										SELECT
-											ROW_NUMBER() OVER (),
+											ROW_NUMBER() OVER () AS _index,
 											tmp._hash
 										FROM
 											(SELECT
@@ -65,18 +65,30 @@ class LiveSelect extends EventEmitter {
 												${parent.hashTable}
 											WHERE
 												query_hash = ${this.queryHash}) AS tmp),
-									removed_hashes AS (
+									changed_hashes AS (
 										SELECT * FROM old_hashes
 										EXCEPT SELECT * FROM cur_hashes),
 									moved_hashes AS (
-										SELECT * FROM cur_hashes WHERE _hash IN
-											(SELECT _hash FROM removed_hashes)),
+										SELECT
+											cur_hashes._index AS new_index,
+											old_hashes._index AS old_index,
+											cur_hashes._hash AS _hash
+										FROM
+											cur_hashes
+										JOIN
+											old_hashes ON
+												(old_hashes._hash = cur_hashes._hash)
+										WHERE
+											cur_hashes._hash IN (SELECT _hash FROM changed_hashes)),
+									removed_hashes AS (
+										SELECT * FROM changed_hashes WHERE _hash NOT IN
+											(SELECT _hash FROM moved_hashes)),
 									new_data AS (
 										SELECT ROW_TO_JSON(tmp3.*) AS row_json
 											FROM
 												(SELECT
 													MD5(CAST(ROW_TO_JSON(cur_results.*) AS TEXT)) AS _hash,
-													ROW_NUMBER() OVER () AS _row_number,
+													ROW_NUMBER() OVER () AS _index,
 													cur_results.*
 												FROM cur_results) AS tmp3
 										WHERE
