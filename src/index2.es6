@@ -24,6 +24,8 @@ var mySelect = triggers.select(`
 		(students.id = scores.student_id)
 	WHERE
 		assignments.class_id = $1
+	ORDER BY
+		score DESC
 `, [ 1 ]);
 
 mySelect.on('update', diff => {

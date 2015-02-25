@@ -50,30 +50,39 @@ class LiveSelect extends EventEmitter {
 									cur_results AS (${query}),
 									cur_hashes AS (
 										SELECT
+											ROW_NUMBER() OVER (),
 											MD5(CAST(ROW_TO_JSON(cur_results.*) AS TEXT)) AS _hash
 										FROM
 											cur_results),
 									old_hashes AS (
 										SELECT
-											UNNEST(row_hashes) AS _hash
+											ROW_NUMBER() OVER (),
+											tmp._hash
 										FROM
-											${parent.hashTable}
-										WHERE
-											query_hash = ${this.queryHash}),
+											(SELECT
+												UNNEST(row_hashes) AS _hash
+											FROM
+												${parent.hashTable}
+											WHERE
+												query_hash = ${this.queryHash}) AS tmp),
 									removed_hashes AS (
 										SELECT * FROM old_hashes
 										EXCEPT SELECT * FROM cur_hashes),
+									moved_hashes AS (
+										SELECT * FROM cur_hashes WHERE _hash IN
+											(SELECT _hash FROM removed_hashes)),
 									new_data AS (
 										SELECT ROW_TO_JSON(tmp3.*) AS row_json
 											FROM
 												(SELECT
 													MD5(CAST(ROW_TO_JSON(cur_results.*) AS TEXT)) AS _hash,
+													ROW_NUMBER() OVER () AS _row_number,
 													cur_results.*
 												FROM cur_results) AS tmp3
 										WHERE
 											_hash IN (
-												SELECT * FROM cur_hashes
-												EXCEPT SELECT * FROM old_hashes)),
+												SELECT _hash FROM cur_hashes
+												EXCEPT SELECT _hash FROM old_hashes)),
 									update_hashes AS (
 										UPDATE
 											${parent.hashTable}
@@ -85,9 +94,15 @@ class LiveSelect extends EventEmitter {
 									removed_hashes_prep AS (
 										SELECT
 											${this.queryHash} AS query_hash,
-											JSON_AGG(removed_hashes._hash) AS removed
+											JSON_AGG(removed_hashes.*) AS removed
 										FROM
 											removed_hashes),
+									moved_hashes_prep AS (
+										SELECT
+											${this.queryHash} AS query_hash,
+											JSON_AGG(moved_hashes.*) AS moved
+										FROM
+											moved_hashes),
 									new_data_prep AS (
 										SELECT
 											${this.queryHash} AS query_hash,
@@ -97,13 +112,16 @@ class LiveSelect extends EventEmitter {
 									joined_prep AS (
 										SELECT
 											removed_hashes_prep.removed,
+											moved_hashes_prep.moved,
 											new_data_prep.added
 										INTO
 											notify_data
 										FROM
 											removed_hashes_prep
 										JOIN new_data_prep ON
-											(removed_hashes_prep.query_hash = new_data_prep.query_hash))
+											(removed_hashes_prep.query_hash = new_data_prep.query_hash)
+										JOIN moved_hashes_prep ON
+											(removed_hashes_prep.query_hash = moved_hashes_prep.query_hash))
 								SELECT
 									JSON_AGG(joined_prep.*)
 								FROM
