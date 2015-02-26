@@ -30,9 +30,12 @@ class LiveSelect extends EventEmitter {
 		if(this.updateFunction in parent.resultCache){
 			// This exact query has been initialized already
 			this.init = parent.init
+			// TODO get initial results from cache
 		}else{
 			parent.resultCache[this.updateFunction] = [];
 
+			// TODO possible to move diffing to separate, global function?
+			// TODO possible to replace IN clauses with INNER JOINs?
 			this.init = new Promise((resolve, reject) => {
 				parent.init.then(result => {
 					querySequence(parent, [ `
@@ -78,8 +81,9 @@ class LiveSelect extends EventEmitter {
 										JOIN
 											old_hashes ON
 												(old_hashes._hash = cur_hashes._hash)
-										WHERE
-											cur_hashes._hash IN (SELECT _hash FROM changed_hashes)),
+										INNER JOIN
+											changed_hashes ON
+												(changed_hashes._hash = cur_hashes._hash)),
 									removed_hashes AS (
 										SELECT * FROM changed_hashes WHERE _hash NOT IN
 											(SELECT _hash FROM moved_hashes)),
@@ -131,9 +135,11 @@ class LiveSelect extends EventEmitter {
 										FROM
 											removed_hashes_prep
 										JOIN new_data_prep ON
-											(removed_hashes_prep.query_hash = new_data_prep.query_hash)
+											(removed_hashes_prep.query_hash =
+												new_data_prep.query_hash)
 										JOIN moved_hashes_prep ON
-											(removed_hashes_prep.query_hash = moved_hashes_prep.query_hash))
+											(removed_hashes_prep.query_hash =
+												moved_hashes_prep.query_hash))
 								SELECT
 									JSON_AGG(joined_prep.*)
 								FROM
@@ -142,11 +148,15 @@ class LiveSelect extends EventEmitter {
 								RETURN notify_data;
 							END;
 						$$ LANGUAGE PLPGSQL
-					`, this.params),
-					`SELECT ${this.updateFunction}()` ])
-						.then(results => resolve(results[2].rows), reject)
+					`, this.params)]).then(resolve, reject)
 				}, reject)
-			}).catch(error => this.emit('error', error))
+			}).then(result => {
+				// Get initial results
+				parent.waitingToUpdate.push(this.updateFunction)
+
+				parent.registerQueryTriggers(this.query, this.updateFunction)
+					.then(tables => { this.tablesUsed = tables });
+			}, error => this.emit('error', error))
 		}
 	}
 
@@ -156,6 +166,7 @@ class LiveSelect extends EventEmitter {
 
 	stop() {
 		var { parent } = this;
+		// TODO add reference counting from event listeners!
 		this.tablesUsed.forEach(table =>
 			_.pull(parent.triggerTables[table].updateFunctions, this.updateFunction));
 		this.removeAllListeners();

@@ -6,6 +6,9 @@ var murmurHash    = require('murmurhash-js').murmur3;
 var LiveSelect    = require('./LiveSelect');
 var querySequence = require('./querySequence');
 
+// Number of milliseconds between refreshing result sets
+const THROTTLE_INTERVAL = 200;
+
 class PgTriggers extends EventEmitter {
 	constructor(connectionString, channel, hashTable) {
 		this.connectionString  = connectionString;
@@ -16,6 +19,8 @@ class PgTriggers extends EventEmitter {
 		this.notifyClientDone  = null;
 		this.cachedQueryTables = {};
 		this.resultCache       = {};
+		this.waitingToUpdate   = [];
+		this.updateInterval    = null;
 
 		this.setMaxListeners(0); // Allow unlimited listeners
 
@@ -38,15 +43,15 @@ class PgTriggers extends EventEmitter {
 
 				client.on('notification', info => {
 					if(info.channel === channel && info.payload in this.triggerTables){
-						this.triggerTables[info.payload].updateFunctions.map(updateFunction =>
-							querySequence(this, [ `SELECT ${updateFunction}()` ])
-								.then(results => {
-									this.emit(updateFunction, results[0].rows);
-									// TODO calc full results!
-									this.resultCache[updateFunction] = results[0].rows;
-								}));
+						this.waitingToUpdate = _.union(
+							this.waitingToUpdate,
+							this.triggerTables[info.payload].updateFunctions);
 					}
 				});
+
+				// Initialize throttled updater
+				this.updateInterval =
+					setInterval(this.refresh.bind(this), THROTTLE_INTERVAL);
 
 			});
 		})
@@ -58,12 +63,7 @@ class PgTriggers extends EventEmitter {
 
 	select(query, params) {
 		var newSelect = new LiveSelect(this, query, params);
-		newSelect.init.then(result => {
-			// TODO initial result handling
-			newSelect.update(result);
-			this.registerQueryTriggers(newSelect.query, newSelect.updateFunction)
-				.then(tables => { newSelect.tablesUsed = tables });
-		}, error => this.emit('error', error));
+		newSelect.init.catch(error => this.emit('error', error));
 		return newSelect
 	}
 
@@ -98,6 +98,33 @@ class PgTriggers extends EventEmitter {
 				resolve(tables);
 			}, reject);
 		});
+	}
+
+	refresh() {
+		var updateCount = this.waitingToUpdate.length;
+		if(updateCount === 0) return Promise.resolve();
+
+		// Clear waitingToUpdate queue and prepare for selection
+		var selectUpdates =
+			this.waitingToUpdate.splice(0, updateCount).join('(),');
+
+		return querySequence(this, [ `SELECT ${selectUpdates}()` ])
+			.then(results => {
+				_.forOwn(results[0].rows[0], (jsonData, updateFunction) => {
+					try{
+						var data = JSON.parse(jsonData);
+					}catch(error){
+						return this.emit('error', error);
+					}
+					this.emit(updateFunction, data);
+					// TODO calc full results!
+					this.resultCache[updateFunction] = data;
+				})
+			}, error => this.emit('error', error))
+	}
+
+	updateResultCache(updateFunction, diff) {
+		
 	}
 
 	/**
@@ -140,6 +167,7 @@ class PgTriggers extends EventEmitter {
 		var { triggerTables, channel } = this;
 
 		this.notifyClientDone();
+		this.updateInterval !== null && clearInterval(this.updateInterval);
 
 		var queries = [];
 		_.forOwn(triggerTables, (tablePromise, table) => {

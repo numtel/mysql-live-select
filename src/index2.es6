@@ -1,3 +1,4 @@
+var util = require('util');
 var PgTriggers = require('./PgTriggers');
 
 const CONN_STR = 'postgres://meteor:meteor@127.0.0.1/meteor';
@@ -29,7 +30,7 @@ var mySelect = triggers.select(`
 `, [ 1 ]);
 
 mySelect.on('update', diff => {
-	console.log(diff);
+	console.log(util.inspect(diff, { depth: null }));
 });
 
 
