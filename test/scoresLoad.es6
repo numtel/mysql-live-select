@@ -56,7 +56,7 @@ exports.scoresLoad = function(test) {
 		// Stage 1 : update each student name
 		var updateStudentNames = function() {
 			if(liveSelects.filter(select => !select.ready).length === 0){
-				querySequence(triggers, newStudentNames.map((name, index) =>
+				querySequence.noTx(triggers, newStudentNames.map((name, index) =>
 					[ `UPDATE students SET name = $1 WHERE id = ${index + 1}`,
 						[ name ] ]), (err, res) => { });
 
@@ -79,7 +79,7 @@ exports.scoresLoad = function(test) {
 					[ fixtureData.scores[id - 1].score * 2, id ]
 				]);
 			}
-			querySequence(triggers, queries, (err, res) => {});
+			querySequence.noTx(triggers, queries, (err, res) => {});
 		};
 
 		liveSelects.forEach(select => {
