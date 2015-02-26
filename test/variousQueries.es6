@@ -27,7 +27,7 @@ exports.variousQueries = function(test) {
 					var updateLog  = []; // Cache for any updates to this query
 					var nextLogPos = 0; // Length at last action performed
 
-					select.on('update', diff => updateLog.push(diff));
+					select.on('update', (diff, data) => updateLog.push({ diff, data }));
 
 					// For each event, check values or perform action, then continue
 					var processEvents = (callback, index) => {
@@ -54,6 +54,7 @@ exports.variousQueries = function(test) {
 									}, reject);
 									break
 								case 'diff':
+								case 'data':
 									if(updateLog.length === nextLogPos) {
 										// No update yet since action
 										setTimeout(() => {
@@ -62,7 +63,7 @@ exports.variousQueries = function(test) {
 									}
 									else {
 										// New update has arrived, check against data or diff
-										test.deepEqual(updateLog[nextLogPos], data,
+										test.deepEqual(updateLog[nextLogPos][eventType], data,
 											`${caseId} Difference on event #${nextLogPos}`);
 
 										// Move to next event

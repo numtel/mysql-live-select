@@ -29,8 +29,8 @@ var mySelect = triggers.select(`
 		score DESC
 `, [ 1 ]);
 
-mySelect.on('update', diff => {
-	console.log(util.inspect(diff, { depth: null }));
+mySelect.on('update', (diff, rows) => {
+	console.log(util.inspect(diff, { depth: null }), rows);
 });
 
 

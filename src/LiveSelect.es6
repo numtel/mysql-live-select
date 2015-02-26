@@ -1,14 +1,8 @@
 var _            = require('lodash');
-var deep         = require('deep-diff');
 var EventEmitter = require('events').EventEmitter;
 var murmurHash    = require('murmurhash-js').murmur3;
 
 var querySequence = require('./querySequence');
-
-// Minimum duration in milliseconds between refreshing results
-// TODO: determine based on load
-// https://git.focus-sis.com/beng/pg-notify-trigger/issues/6
-const THROTTLE_INTERVAL = 1000;
 
 class LiveSelect extends EventEmitter {
 	constructor(parent, query, params) {
@@ -25,15 +19,22 @@ class LiveSelect extends EventEmitter {
 		this.queryHash = rawHash + (1 << 31);
 		this.updateFunction = `${channel}_${rawHash}`;
 
-		parent.on(this.updateFunction, this.update.bind(this));
+		this.boundUpdate = this.update.bind(this);
+
+		parent.on(this.updateFunction, this.boundUpdate);
 
 		if(this.updateFunction in parent.resultCache){
 			// This exact query has been initialized already
-			this.init = parent.init
-			// TODO get initial results from cache
-		}else{
-			parent.resultCache[this.updateFunction] = [];
+			var thisCache = parent.resultCache[this.updateFunction];
+			this.init = thisCache.init;
 
+			// Send initial results from cache if available
+			if(thisCache.data.length > 0) {
+				this.update(
+					{ removed: null, moved: null, added: thisCache.data },
+					thisCache.data);
+			}
+		}else{
 			// TODO possible to move diffing to separate, global function?
 			// TODO possible to replace IN clauses with INNER JOINs?
 			this.init = new Promise((resolve, reject) => {
@@ -54,7 +55,10 @@ class LiveSelect extends EventEmitter {
 									cur_hashes AS (
 										SELECT
 											ROW_NUMBER() OVER () AS _index,
-											MD5(CAST(ROW_TO_JSON(cur_results.*) AS TEXT)) AS _hash
+											MD5(
+												CAST(ROW_TO_JSON(cur_results.*) AS TEXT) ||
+												CAST(ROW_NUMBER() OVER () AS TEXT)
+											) AS _hash
 										FROM
 											cur_results),
 									old_hashes AS (
@@ -91,7 +95,10 @@ class LiveSelect extends EventEmitter {
 										SELECT ROW_TO_JSON(tmp3.*) AS row_json
 											FROM
 												(SELECT
-													MD5(CAST(ROW_TO_JSON(cur_results.*) AS TEXT)) AS _hash,
+													MD5(
+														CAST(ROW_TO_JSON(cur_results.*) AS TEXT) ||
+														CAST(ROW_NUMBER() OVER () AS TEXT)
+													) AS _hash,
 													ROW_NUMBER() OVER () AS _index,
 													cur_results.*
 												FROM cur_results) AS tmp3
@@ -156,31 +163,62 @@ class LiveSelect extends EventEmitter {
 
 				parent.registerQueryTriggers(this.query, this.updateFunction)
 					.then(tables => { this.tablesUsed = tables });
-			}, error => this.emit('error', error))
+			}, error => this.emit('error', error));
+
+			parent.resultCache[this.updateFunction] = { data: [], init: this.init };
 		}
 	}
 
-	update(diff) {
-		this.emit('update', diff)
+	update(diff, rows) {
+		this.ready = true;
+		this.emit('update', filterHashProperties(diff), filterHashProperties(rows))
 	}
 
 	stop() {
 		var { parent } = this;
-		// TODO add reference counting from event listeners!
-		this.tablesUsed.forEach(table =>
-			_.pull(parent.triggerTables[table].updateFunctions, this.updateFunction));
+
 		this.removeAllListeners();
+		parent.removeListener(this.updateFunction, this.boundUpdate);
+
+		// Asynchronously, remove trigger if no longer used
+		return new Promise((resolve, reject) => {
+			setTimeout(() => {
+				if(parent.listeners(this.updateFunction).length === 0){
+					// Remove listing from parent
+					this.tablesUsed.forEach(table =>
+						_.pull(
+							parent.triggerTables[table].updateFunctions,
+							this.updateFunction));
+
+					// Remove from database
+					querySequence(parent, [
+						`DROP FUNCTION IF EXISTS ${this.updateFunction}()` ])
+						.then(resolve, reject);
+				}else{
+					resolve()
+				}
+			}, 100)
+		})
 	}
 }
 
 module.exports = LiveSelect;
 
+/**
+ * @param Array|Object diff If object, all values must be arrays
+ */
 function filterHashProperties(diff) {
-	return diff.map(event => {
-		delete event[2]._hash;
-		if(event.length > 3) delete event[3]._hash;
-		return event;
-	});
+	if(diff instanceof Array) {
+		return diff.map(event => {
+			delete event._hash;
+			return event;
+		});
+	}else{
+		_.forOwn(diff, (rows, key) => {
+			diff[key] = filterHashProperties(rows)
+		})
+	}
+	return diff;
 }
 
 function interpolate(query, params) {

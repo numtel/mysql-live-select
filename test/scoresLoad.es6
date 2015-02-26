@@ -83,10 +83,6 @@ exports.scoresLoad = function(test) {
 		};
 
 		liveSelects.forEach(select => {
-			select.on('ready', results => {
-				updateStudentNames();
-			});
-
 			select.on('update', (diff) => {
 				switch(curStage){
 					case 0:
@@ -105,10 +101,10 @@ exports.scoresLoad = function(test) {
 						break;
 					case 1:
 						readyCount++;
-						test.ok(diff
+						test.ok(diff.added
 							.map(change =>
-								change[3].student_name ===
-									newStudentNames[change[3].student_id - 1])
+								change.student_name ===
+									newStudentNames[change.student_id - 1])
 							.indexOf(false) === -1, 'Student name update check');
 
 						if(readyCount === liveSelects.length){
@@ -119,10 +115,10 @@ exports.scoresLoad = function(test) {
 						}
 						break;
 					case 2:
-						if(diff
+						if(diff.added
 								.map(change =>
-									change[3].score ===
-										fixtureData.scores[change[3].score_id - 1].score * 2)
+									change.score ===
+										fixtureData.scores[change.score_id - 1].score * 2)
 								.indexOf(false) === -1){
 							// LiveSelect is only fully updated after all its scores have
 							//  doubled

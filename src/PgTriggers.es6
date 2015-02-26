@@ -7,7 +7,7 @@ var LiveSelect    = require('./LiveSelect');
 var querySequence = require('./querySequence');
 
 // Number of milliseconds between refreshing result sets
-const THROTTLE_INTERVAL = 200;
+const THROTTLE_INTERVAL = 100;
 
 class PgTriggers extends EventEmitter {
 	constructor(connectionString, channel, hashTable) {
@@ -50,6 +50,7 @@ class PgTriggers extends EventEmitter {
 				});
 
 				// Initialize throttled updater
+				// TODO also update when at a threshold waitingToUpdate length
 				this.updateInterval =
 					setInterval(this.refresh.bind(this), THROTTLE_INTERVAL);
 
@@ -112,19 +113,47 @@ class PgTriggers extends EventEmitter {
 			.then(results => {
 				_.forOwn(results[0].rows[0], (jsonData, updateFunction) => {
 					try{
-						var data = JSON.parse(jsonData);
+						var diff = JSON.parse(jsonData);
 					}catch(error){
 						return this.emit('error', error);
 					}
-					this.emit(updateFunction, data);
-					// TODO calc full results!
-					this.resultCache[updateFunction] = data;
+
+					if(diff[0].added === null &&
+							diff[0].moved === null &&
+							diff[0].removed === null) return;
+
+					var rows = this.resultCache[updateFunction].data =
+						this.calcUpdatedResultCache(updateFunction, diff[0]);
+
+					this.emit(updateFunction, diff[0], rows);
 				})
 			}, error => this.emit('error', error))
 	}
 
-	updateResultCache(updateFunction, diff) {
+	calcUpdatedResultCache(updateFunction, diff) {
+		var oldResults = this.resultCache[updateFunction].data;
+		var newResults = oldResults.slice();
+
+		diff.removed !== null && diff.removed
+			.forEach(removed => newResults[removed._index - 1] = undefined);
+
+		// Deallocate first to ensure no overwrites
+		diff.moved !== null && diff.moved
+			.forEach(moved => {
+				newResults[moved.old_index - 1] = undefined;
+			});
+
+		diff.moved !== null && diff.moved
+			.forEach(moved => {
+				var movingRow = oldResults[moved.old_index - 1];
+				movingRow._index = moved.new_index;
+				newResults[moved.new_index - 1] = movingRow;
+			});
+
+		diff.added !== null && diff.added
+			.forEach(added => newResults[added._index - 1] = added);
 		
+		return newResults.filter(row => row !== undefined);
 	}
 
 	/**
@@ -167,6 +196,7 @@ class PgTriggers extends EventEmitter {
 		var { triggerTables, channel } = this;
 
 		this.notifyClientDone();
+		this.removeAllListeners();
 		this.updateInterval !== null && clearInterval(this.updateInterval);
 
 		var queries = [];
