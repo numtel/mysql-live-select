@@ -11,6 +11,19 @@ exports.scoresLoad = function(test) {
 	var selectsPerClass =
 		process.env.CLIENT_MULTIPLIER ? parseInt(process.env.CLIENT_MULTIPLIER) : 1;
 
+	// Collect and report memory usage information
+	if(printStats){
+		var memoryUsageSnapshots = [];
+		var updateMemoryUsage = function() {
+			memoryUsageSnapshots.push({
+				time: Date.now(),
+				memory: process.memoryUsage().heapTotal
+			});
+		};
+		var memoryInterval = setInterval(updateMemoryUsage, 500);
+	}
+
+
 	var fixtureData = scoresLoadFixture.generate(
 		classCount, // number of classes
 		4,          // assignments per class
@@ -131,6 +144,10 @@ exports.scoresLoad = function(test) {
 						}
 
 						if(readyCount === liveSelects.length){
+							if(printStats){
+								clearInterval(memoryInterval);
+								console.log(JSON.stringify(memoryUsageSnapshots));
+							}
 							test.done();
 						}
 						break;
