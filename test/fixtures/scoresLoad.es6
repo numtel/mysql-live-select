@@ -64,27 +64,32 @@ function columnTypeFromName(name) {
  */
 exports.install = function(triggersInstance, generation) {
 	return Promise.all(_.map(generation, (rows, table) => {
-		var valueCount = 0;
 
 		// Reset PgTriggers trigger cache so that triggers are recreated if needed
 		delete triggersInstance.triggerTables[table];
 
 		// Create tables, Insert data
-		return querySequence(triggersInstance, [
+		var installQueries = [
 			`DROP TABLE IF EXISTS ${table} CASCADE`,
 
 			`CREATE TABLE ${table} (
 				${_.keys(rows[0])
 					.map(column => `${column} ${columnTypeFromName(column)}`).join(', ')},
 				CONSTRAINT ${table}_pkey PRIMARY KEY (id)
-			) WITH ( OIDS=FALSE )`,
+			) WITH ( OIDS=FALSE )`
+		];
 
-			[`INSERT INTO ${table}
-					(${_.keys(rows[0]).join(', ')})
-				 VALUES	${rows.map(row =>
+		// Insert max 500 rows per query
+		installQueries = installQueries.concat(_.chunk(rows, 500).map(rowShard => {
+			var valueCount = 0;
+			return [`INSERT INTO ${table}
+					(${_.keys(rowShard[0]).join(', ')})
+				 VALUES	${rowShard.map(row =>
 					`(${_.map(row, () => '$' + ++valueCount).join(', ')})`).join(', ')}`,
-			 _.flatten(rows.map(row => _.values(row))) ]
-		]);
+			 _.flatten(rowShard.map(row => _.values(row))) ]
+		}));
+
+		return querySequence(triggersInstance, installQueries)
 	}));
 
 }

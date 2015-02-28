@@ -10,6 +10,10 @@ exports.scoresLoad = function(test) {
 		process.env.CLASS_COUNT ? parseInt(process.env.CLASS_COUNT) : 1;
 	var selectsPerClass =
 		process.env.CLIENT_MULTIPLIER ? parseInt(process.env.CLIENT_MULTIPLIER) : 1;
+	var percentToUpdate =
+		process.env.PERCENT_TO_UPDATE ? parseInt(process.env.PERCENT_TO_UPDATE) : 100;
+	var assignPerClass =
+		process.env.ASSIGN_PER_CLASS ? parseInt(process.env.ASSIGN_PER_CLASS) : 4;
 
 	// Collect and report memory usage information
 	if(printStats){
@@ -25,8 +29,8 @@ exports.scoresLoad = function(test) {
 
 
 	var fixtureData = scoresLoadFixture.generate(
-		classCount, // number of classes
-		4,          // assignments per class
+		classCount,
+		assignPerClass,
 		20,         // students per class
 		6           // classes per student
 	);
@@ -41,7 +45,10 @@ exports.scoresLoad = function(test) {
 
 	printDebug && console.log('FIXTURE DATA\n', fixtureData);
 
+	printStats && console.time('score data install');
 	scoresLoadFixture.install(triggers, fixtureData).then(result => {
+		printStats && console.timeEnd('score data install');
+
 		var liveSelects = [];
 		_.range(selectsPerClass).forEach(selectIndex => {
 			liveSelects = liveSelects.concat(_.range(classCount).map(index =>
@@ -83,20 +90,29 @@ exports.scoresLoad = function(test) {
 		};
 
 		// Stage 2 : update scores individually
+		var updatedScoreIds = [];
 		var updateScores = function() {
 			var scoresToUpdate = _.range(fixtureData.scores.length);
 			var queries        = [];
+			var finalCount =
+				Math.round(scoresToUpdate.length * (100 - percentToUpdate) / 100);
 
-			while(scoresToUpdate.length > 0){
+			while(scoresToUpdate.length > finalCount){
 				var id = scoresToUpdate.splice(
 					Math.floor(Math.random() * scoresToUpdate.length), 1)[0] + 1;
+
+				updatedScoreIds.push(id);
 
 				queries.push([
 					`UPDATE scores SET score = $1 WHERE id = $2`,
 					[ fixtureData.scores[id - 1].score * 2, id ]
 				]);
 			}
-			querySequence.noTx(triggers, queries);
+
+			printStats && console.time('score update queries')
+
+			querySequence.noTx(triggers, queries).then(result =>
+				printStats && console.timeEnd('score update queries'));
 		};
 
 		liveSelects.forEach(select => {
@@ -132,22 +148,20 @@ exports.scoresLoad = function(test) {
 						}
 						break;
 					case 2:
-						if(diff.added
-								.map(change =>
-									change.score ===
-										fixtureData.scores[change.score_id - 1].score * 2)
-								.indexOf(false) === -1){
-							// LiveSelect is only fully updated after all its scores have
-							//  doubled
-							readyCount++;
-							select.stop();
-						}
+						diff.added.forEach(change => {
+							if(change.score ===
+									fixtureData.scores[change.score_id - 1].score * 2) {
+								_.pull(updatedScoreIds, change.score_id)
+							}
+						});
 
-						if(readyCount === liveSelects.length){
+						if(updatedScoreIds.length === 0){
 							if(printStats){
 								clearInterval(memoryInterval);
 								console.log(JSON.stringify(memoryUsageSnapshots));
 							}
+							// Make sure all are stopped
+							liveSelects.forEach(thisSelect => thisSelect.stop());
 							test.done();
 						}
 						break;
