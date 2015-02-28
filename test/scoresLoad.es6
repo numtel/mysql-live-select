@@ -8,6 +8,9 @@ var scoresLoadFixture = require('./fixtures/scoresLoad');
 exports.scoresLoad = function(test) {
 	var classCount =
 		process.env.CLASS_COUNT ? parseInt(process.env.CLASS_COUNT) : 1;
+	var selectsPerClass =
+		process.env.CLIENT_MULTIPLIER ? parseInt(process.env.CLIENT_MULTIPLIER) : 1;
+
 	var fixtureData = scoresLoadFixture.generate(
 		classCount, // number of classes
 		4,          // assignments per class
@@ -25,28 +28,29 @@ exports.scoresLoad = function(test) {
 
 	printDebug && console.log('FIXTURE DATA\n', fixtureData);
 
-	scoresLoadFixture.install(triggers, fixtureData)
-		.catch(error => console.error(error))
-		.then(result => {
-		var liveSelects = _.range(classCount).map(index =>
-			triggers.select(`
-				SELECT
-					students.name  AS student_name,
-					students.id    AS student_id,
-					assignments.id AS assignment_id,
-					scores.id      AS score_id,
-					assignments.name,
-					assignments.value,
-					scores.score
-				FROM
-					scores
-				INNER JOIN assignments ON
-					(assignments.id = scores.assignment_id)
-				INNER JOIN students ON
-					(students.id = scores.student_id)
-				WHERE
-					assignments.class_id = $1
-			`, [ index + 1 ]));
+	scoresLoadFixture.install(triggers, fixtureData).then(result => {
+		var liveSelects = [];
+		_.range(selectsPerClass).forEach(selectIndex => {
+			liveSelects = liveSelects.concat(_.range(classCount).map(index =>
+				triggers.select(`
+					SELECT
+						students.name  AS student_name,
+						students.id    AS student_id,
+						assignments.id AS assignment_id,
+						scores.id      AS score_id,
+						assignments.name,
+						assignments.value,
+						scores.score
+					FROM
+						scores
+					INNER JOIN assignments ON
+						(assignments.id = scores.assignment_id)
+					INNER JOIN students ON
+						(students.id = scores.student_id)
+					WHERE
+						assignments.class_id = $1
+				`, [ index + 1 ])));
+		});
 		var curStage = 0;
 
 		// Stage 0 : cache initial data
@@ -58,7 +62,7 @@ exports.scoresLoad = function(test) {
 			if(liveSelects.filter(select => !select.ready).length === 0){
 				querySequence.noTx(triggers, newStudentNames.map((name, index) =>
 					[ `UPDATE students SET name = $1 WHERE id = ${index + 1}`,
-						[ name ] ]), (err, res) => { });
+						[ name ] ]));
 
 				// Only perform this operation once
 				updateStudentNames = function() {};
@@ -79,7 +83,7 @@ exports.scoresLoad = function(test) {
 					[ fixtureData.scores[id - 1].score * 2, id ]
 				]);
 			}
-			querySequence.noTx(triggers, queries, (err, res) => {});
+			querySequence.noTx(triggers, queries);
 		};
 
 		liveSelects.forEach(select => {
@@ -133,6 +137,6 @@ exports.scoresLoad = function(test) {
 				}
 			});
 		});
-	});
+	}, error => console.error(error));
 
 }
