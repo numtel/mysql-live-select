@@ -59,14 +59,17 @@ function columnTypeFromName(name) {
 
 /**
  * Create/replace test tables filled with fixture data
- * @param  Object   generatation Output from generate() function above
+ * @param  Object   triggersInstance Instance of PgTriggers or pg client
+ * @param  Object   generatation     Output from generate() function above
  * @return Promise
  */
 exports.install = function(triggersInstance, generation) {
 	return Promise.all(_.map(generation, (rows, table) => {
 
 		// Reset PgTriggers trigger cache so that triggers are recreated if needed
-		delete triggersInstance.triggerTables[table];
+		if('triggerTables' in triggersInstance) {
+			delete triggersInstance.triggerTables[table];
+		}
 
 		// Create tables, Insert data
 		var installQueries = [
