@@ -1,6 +1,8 @@
+require('console.table');
 var _ = require('lodash');
 var pg = require('pg');
 var babar = require('babar');
+var stats = require('simple-statistics');
 var spawn = require('child_process').spawn;
 
 var querySequence = require('../../src/querySequence');
@@ -11,6 +13,10 @@ const MIN_WAIT = 100;
 var memoryUsage = [];
 var classUpdates = [];
 var waitingOps = [];
+
+var selectCount = settings.maxSelects &&
+	settings.maxSelects < settings.init.classCount ?
+		settings.maxSelects : settings.init.classCount;
 
 // Create initial data
 var fixtureData = scoresLoadFixture.generate(
@@ -23,7 +29,8 @@ var fixtureData = scoresLoadFixture.generate(
 console.log(
 	'Press CTRL+C to exit and display results when satisfied with duration.\n\n',
 	'Class Count: ', settings.init.classCount,
-	'Instance Multiplier: ', settings.instanceMultiplier, '\n\n',
+	'Instance Multiplier: ', settings.instanceMultiplier,
+	'Select Count: ', selectCount, '\n\n',
 	'Initial Data Count \n',
 	'Students: ', fixtureData.students.length,
 	'Assignments: ', fixtureData.assignments.length,
@@ -63,7 +70,8 @@ var childPromise = new Promise((resolve, reject) => {
 			options.conn,
 			options.channel,
 			settings.init.classCount,
-			settings.instanceMultiplier
+			settings.instanceMultiplier,
+			settings.maxSelects
 		]);
 
 		child.stdout.on('data', data => {
@@ -103,7 +111,7 @@ var childPromise = new Promise((resolve, reject) => {
 						responseTimes
 					});
 
-					if(classUpdates.length === settings.init.classCount) {
+					if(classUpdates.length === selectCount) {
 						// childPromise is ready when all selects have initial data
 						console.timeEnd('Initialized each select instance');
 						resolve()
@@ -128,8 +136,12 @@ var childPromise = new Promise((resolve, reject) => {
 // Begin throttled test operations
 var performRandomUpdate = function() {
 	// Select random score record
-	var scoreRow = fixtureData.scores[
-		Math.floor(Math.random() * fixtureData.scores.length)];
+	do {
+		var scoreRow = fixtureData.scores[
+			Math.floor(Math.random() * fixtureData.scores.length)];
+
+		var classId = fixtureData.assignments[scoreRow.assignment_id].class_id;
+	} while(classId > settings.maxSelect);
 
 	clientPromise.then(client => {
 		// Record operation time
@@ -220,6 +232,15 @@ process.on('SIGINT', () => {
 		console.log(babar(eventPrep, {
 			caption: 'Response Time by Elapsed Time (Milliseconds / Seconds)'
 		}));
+
+		var allResponseTimes = eventPrep.map(evt => evt[1]);
+		console.table([ 0.05, 0.25, 0.5, 0.75, 0.95, 1 ].map(percentile => {
+			return {
+				'Percentile': percentile * 100,
+				'Time (ms)': Math.round(stats.quantile(allResponseTimes, percentile))
+			}
+		}));
+		
 	}
 
 	process.exit();

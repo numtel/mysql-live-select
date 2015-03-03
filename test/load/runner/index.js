@@ -2,10 +2,11 @@ require('babel/register');
 
 var _ = require('lodash');
 
-global.connStr = process.argv[2];
-global.channel = process.argv[3];
-global.classCount = parseInt(process.argv[4], 10);
+global.connStr            = process.argv[2];
+global.channel            = process.argv[3];
+global.classCount         = parseInt(process.argv[4], 10);
 global.instanceMultiplier = parseInt(process.argv[5], 10);
+global.maxSelects         = parseInt(process.argv[6], 10);
 
 var PgTriggers = require('../../../');
 

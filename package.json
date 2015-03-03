@@ -24,10 +24,12 @@
 		"notify"
 	],
 	"devDependencies": {
-		"babel"    : "^4.3.0",
-		"nodeunit" : "~0.9.0",
-		"minimist" : "^1.1.0",
-		"babar"    : "0.0.3"
+		"babel"             : "^4.3.0",
+		"nodeunit"          : "~0.9.0",
+		"minimist"          : "^1.1.0",
+		"babar"             : "0.0.3",
+		"simple-statistics" : "0.9.0",
+		"console.table"     : "0.4.0"
 	},
 	"dependencies": {
 		"pg"            : "^4.2.0",

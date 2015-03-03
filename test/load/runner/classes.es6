@@ -1,7 +1,9 @@
 var _ = require('lodash');
+var selectCount = 
+	maxSelects && maxSelects < classCount ? maxSelects : classCount;
 
 module.exports = _.flatten(_.range(instanceMultiplier).map(instance =>
-	_.range(classCount).map(index => {
+	_.range(selectCount).map(index => {
 
 	var select = triggers.select(`
 		SELECT
