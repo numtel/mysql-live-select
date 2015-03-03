@@ -61,21 +61,21 @@ exports.cases.innerJoin = {
 			removed: null,
 			moved: null,
 			added: 
-			 [ { _index: 3,
-					 student_name: 'Student 3',
+			 [ { _index: 1,
+					 student_name: 'Student 2',
 					 name: 'Assignment 1',
 					 value: 64,
-					 score: 28 },
+					 score: 54 },
 				 { _index: 2,
 					 student_name: 'Student 1',
 					 name: 'Assignment 1',
 					 value: 64,
 					 score: 52 },
-				 { _index: 1,
-					 student_name: 'Student 2',
+				 { _index: 3,
+					 student_name: 'Student 3',
 					 name: 'Assignment 1',
 					 value: 64,
-					 score: 54 } ] } },
+					 score: 28 } ] } },
 		{ perform: [
 			`INSERT INTO scores (id, assignment_id, student_id, score) VALUES
 				(4, 2, 1, 25)`
@@ -468,9 +468,9 @@ exports.cases.allExpression = {
 				removed: null,
 				moved: null,
 				added: 
-				 [ { _index: 3, is_lte_28: true },
+				 [ { _index: 1, is_lte_28: false },
 					 { _index: 2, is_lte_28: false },
-					 { _index: 1, is_lte_28: false } ] } },
+					 { _index: 3, is_lte_28: true } ] } },
 		{ perform: [
 			`UPDATE scores SET score = 14 WHERE id = 2`
 		] },

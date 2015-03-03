@@ -66,6 +66,7 @@ var childPromise = new Promise((resolve, reject) => {
 	installPromise.then(() => {
 		console.time('Initialized each select instance');
 		var child = spawn('node', [
+			'--debug',
 			'test/load/runner/',
 			options.conn,
 			options.channel,
@@ -140,7 +141,7 @@ var performRandomUpdate = function() {
 		var scoreRow = fixtureData.scores[
 			Math.floor(Math.random() * fixtureData.scores.length)];
 
-		var classId = fixtureData.assignments[scoreRow.assignment_id].class_id;
+		var classId = fixtureData.assignments[scoreRow.assignment_id - 1].class_id;
 	} while(classId > settings.maxSelect);
 
 	clientPromise.then(client => {
@@ -185,6 +186,14 @@ var performRandomInsert = function() {
 
 childPromise.then(() => {
 	console.log('\nLoad operations in progress...')
+
+	var runTimeSeconds = 0;
+	setInterval(() => {
+		runTimeSeconds++;
+		if(runTimeSeconds % 15 === 0){
+			console.log(runTimeSeconds);
+		}
+	}, 1000);
 
 	settings.opPerSecond.insert &&
 		setInterval(performRandomInsert,

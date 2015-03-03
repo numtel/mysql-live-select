@@ -85,9 +85,8 @@ class LiveSelect extends EventEmitter {
 										JOIN
 											old_hashes ON
 												(old_hashes._hash = cur_hashes._hash)
-										INNER JOIN
-											changed_hashes ON
-												(changed_hashes._hash = cur_hashes._hash)),
+										WHERE
+											cur_hashes._hash IN (SELECT _hash FROM changed_hashes)),
 									removed_hashes AS (
 										SELECT * FROM changed_hashes WHERE _hash NOT IN
 											(SELECT _hash FROM moved_hashes)),
@@ -105,7 +104,7 @@ class LiveSelect extends EventEmitter {
 										WHERE
 											_hash IN (
 												SELECT _hash FROM cur_hashes
-												EXCEPT SELECT _hash FROM old_hashes)),
+													EXCEPT SELECT _hash FROM old_hashes)),
 									update_hashes AS (
 										UPDATE
 											${parent.hashTable}

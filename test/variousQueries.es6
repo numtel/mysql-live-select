@@ -63,7 +63,8 @@ exports.variousQueries = function(test) {
 									}
 									else {
 										// New update has arrived, check against data or diff
-										test.deepEqual(updateLog[nextLogPos][eventType], data,
+										test.deepEqual(
+											orderByIndex(updateLog[nextLogPos][eventType]), data,
 											`${caseId} Difference on event #${nextLogPos}`);
 
 										// Move to next event
@@ -92,6 +93,16 @@ exports.variousQueries = function(test) {
 	)).then(() => test.done());
 }
 
+function orderByIndex(data) {
+	if(data instanceof Array){
+		return _.sortBy(data, '_index')
+	}else if(data === null){
+		return null;
+	}else{
+		// Object with arrays as values
+		return _.object(_.map(data, (value, key) => [ key, orderByIndex(value) ]));
+	}
+}
 
 function applyTableSuffixes(originalQuery, suffix) {
 	return _.keys(variousQueriesFixture.data)
