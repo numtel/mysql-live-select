@@ -103,17 +103,13 @@ class PgTriggers extends EventEmitter {
 
 	refresh() {
 		var updateCount = this.waitingToUpdate.length;
-		if(updateCount === 0) return Promise.resolve();
+		if(updateCount === 0) return;
 
-		// Clear waitingToUpdate queue and prepare for selection
-		var selectUpdates =
-			this.waitingToUpdate.splice(0, updateCount).join('(),');
-
-		return querySequence(this, [ `SELECT ${selectUpdates}()` ])
-			.then(results => {
-				_.forOwn(results[0].rows[0], (jsonData, updateFunction) => {
+		this.waitingToUpdate.splice(0, updateCount).map(updateFunction =>
+			querySequence(this, [ `SELECT ${updateFunction}()` ])
+				.then(results => {
 					try{
-						var diff = JSON.parse(jsonData);
+						var diff = JSON.parse(results[0].rows[0][updateFunction]);
 					}catch(error){
 						return this.emit('error', error);
 					}
@@ -126,8 +122,7 @@ class PgTriggers extends EventEmitter {
 						this.calcUpdatedResultCache(updateFunction, diff[0]);
 
 					this.emit(updateFunction, diff[0], rows);
-				})
-			}, error => this.emit('error', error))
+				}, error => this.emit('error', error)));
 	}
 
 	calcUpdatedResultCache(updateFunction, diff) {
@@ -152,8 +147,8 @@ class PgTriggers extends EventEmitter {
 
 		diff.added !== null && diff.added
 			.forEach(added => newResults[added._index - 1] = added);
-		
-		return newResults.filter(row => row !== undefined);
+
+		return newResults.filter(row => row !== undefined)
 	}
 
 	/**
