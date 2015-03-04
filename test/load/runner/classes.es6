@@ -23,7 +23,7 @@ module.exports = _.flatten(_.range(instanceMultiplier).map(instance =>
 		WHERE
 			assignments.class_id = $1
 		ORDER BY
-			score_id DESC
+			score_id ASC
 	`, [ index + 1 ]);
 
 	select.on('update', (diff, rows) => {
@@ -31,7 +31,7 @@ module.exports = _.flatten(_.range(instanceMultiplier).map(instance =>
 		if(diff.added) {
 			scoreIds = diff.added.map(row => row.score_id).join(',')
 		}
-		process.stdout.write(['CLASS_UPDATE', Date.now(), scoreIds].join(' '))
+		process.stdout.write(['CLASS_UPDATE', Date.now(), index + 1, scoreIds].join(' '))
 	});
 
 	return select;

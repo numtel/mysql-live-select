@@ -86,25 +86,22 @@ var childPromise = new Promise((resolve, reject) => {
 					break;
 				case 'CLASS_UPDATE':
 					var eventTime = parseInt(data[1], 10);
-					var scoreIds = data[2].split(',').map(scoreId => parseInt(scoreId, 10));
+					var classId = parseInt(data[2], 10);
+					var scoreIds = data[3].split(',').map(scoreId => parseInt(scoreId, 10));
 					var responseTimes = null;
 
-					// TODO why does this sometimes output all rows!?
-// 					classUpdates.length > settings.init.classCount &&
-// 						console.log('UPin', scoreIds);
+// 					classUpdates.length > selectCount &&
+// 						console.log('UPin', classId, eventTime, scoreIds);
 
 					if(waitingOps.length !== 0){
 						var myOps = waitingOps.filter(op =>
 							scoreIds.indexOf(op.scoreId) !== -1);
-						// TODO why is there not 1:1 relationship?
-						if(myOps.length !== 0){
-							// Remove myOps from the global wait list
-							waitingOps = waitingOps.filter(op =>
-								scoreIds.indexOf(op.scoreId) === -1);
+						// Remove myOps from the global wait list
+						waitingOps = waitingOps.filter(op =>
+							scoreIds.indexOf(op.scoreId) === -1);
 
-							// Calculate response time
-							responseTimes = myOps.map(op => eventTime - op.time);
-						}
+						// Calculate response time
+						responseTimes = myOps.map(op => eventTime - op.time);
 					}
 
 					classUpdates.push({
@@ -115,7 +112,8 @@ var childPromise = new Promise((resolve, reject) => {
 					if(classUpdates.length === selectCount) {
 						// childPromise is ready when all selects have initial data
 						console.timeEnd('Initialized each select instance');
-						resolve()
+						// Wait for PgTriggers interval to come around, just in case...
+						setTimeout(resolve, 200);
 					}
 					break;
 				default:
@@ -149,6 +147,7 @@ var performRandom = {
 			// Record operation time
 			waitingOps.push({
 				scoreId: scoreRow.id,
+				classId,
 				time: Date.now()
 			});
 // 	 		console.log('UPDATING', scoreRow.id, classId);
@@ -172,6 +171,7 @@ var performRandom = {
 		clientPromise.then(client => {
 			waitingOps.push({
 				scoreId,
+				classId,
 				time: Date.now()
 			});
 // 	 		console.log('INSERTING', scoreId, classId, assignId);
@@ -240,6 +240,8 @@ process.on('SIGINT', () => {
 		'Responses Received: ', filteredEvents.length, '\n',
 		'Still Waiting for Response: ', waitingOps.length, '\n'
 	);
+
+// 	console.log(waitingOps);
 
 	if(memoryUsage.length !== 0){
 		// Print memory usage graph

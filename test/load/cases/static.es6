@@ -1,6 +1,6 @@
 module.exports = {
 	init: {
-		classCount: 2000,
+		classCount: 200,
 		assignPerClass: 30,
 		studentsPerClass: 20,
 		classesPerStudent: 6
