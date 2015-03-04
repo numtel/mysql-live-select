@@ -481,3 +481,5 @@ exports.cases.allExpression = {
 		} },
 	]
 }
+
+exports.cases = _.pick(exports.cases, 'innerJoin');

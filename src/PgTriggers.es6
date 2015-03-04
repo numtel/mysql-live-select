@@ -13,7 +13,6 @@ class PgTriggers extends EventEmitter {
 	constructor(connectionString, channel, hashTable) {
 		this.connectionString  = connectionString;
 		this.channel           = channel;
-		this.hashTable         = hashTable || `${channel}_hashes`;
 		this.triggerTables     = {};
 		this.notifyClient      = null;
 		this.notifyClientDone  = null;
@@ -33,12 +32,7 @@ class PgTriggers extends EventEmitter {
 				this.notifyClientDone = done;
 
 				querySequence(client, [
-					`LISTEN "${channel}"`,
-					`CREATE UNLOGGED TABLE IF NOT EXISTS "${this.hashTable}" (
-							query_hash INTEGER PRIMARY KEY,
-							row_hashes TEXT[]
-						) WITH ( OIDS=FALSE )`,
-					`TRUNCATE TABLE "${this.hashTable}"`
+					`LISTEN "${channel}"`
 				]).then(resolve, error => { this.emit('error', error); reject(error) });
 
 				client.on('notification', info => {
@@ -94,7 +88,9 @@ class PgTriggers extends EventEmitter {
 						triggerTables[table].updateFunctions = [];
 					}
 
-					triggerTables[table].updateFunctions.push(updateFunction);
+					if(triggerTables[table].updateFunctions.indexOf(updateFunction) === -1){
+						triggerTables[table].updateFunctions.push(updateFunction);
+					}
 				});
 				resolve(tables);
 			}, reject);
@@ -105,28 +101,119 @@ class PgTriggers extends EventEmitter {
 		var updateCount = this.waitingToUpdate.length;
 		if(updateCount === 0) return;
 
-		this.waitingToUpdate.splice(0, updateCount).map(updateFunction =>
-			querySequence(this, [ `SELECT ${updateFunction}()` ])
-				.then(results => {
-					try{
-						var diff = JSON.parse(results[0].rows[0][updateFunction]);
-					}catch(error){
-						return this.emit('error', error);
-					}
+		this.waitingToUpdate.splice(0, updateCount).map(updateFunction => {
+			var cache = this.resultCache[updateFunction];
+			var curHashes, oldHashes, newHashes, addedRows;
+			// Run hash and result query in same transaction
+			this.getClient((error, client, done) => {
+				if(error) return this.emit('error', error);
 
-					if(diff[0].added === null &&
-							diff[0].moved === null &&
-							diff[0].removed === null) return;
+				client.query('BEGIN', (error, result) => {
+					if(error) return this.emit('error', error);
+					getHashes();
+				})
 
-					var rows = this.resultCache[updateFunction].data =
-						this.calcUpdatedResultCache(updateFunction, diff[0]);
+				var getHashes = () => {
+					client.query(`
+						WITH res AS (${cache.query})
+						SELECT
+							MD5(CAST(ROW_TO_JSON(res.*) AS TEXT)) AS _hash
+						FROM res
+					`, cache.params, (error, result) => {
+						if(error) return rollback(error);
 
-					this.emit(updateFunction, diff[0], rows);
-				}, error => this.emit('error', error)));
+						curHashes = result.rows.map(row => row._hash);
+						oldHashes = cache.data.map(row => row._hash);
+						newHashes = curHashes.filter(
+							hash => oldHashes.indexOf(hash) === -1);
+
+						if(newHashes.length) {
+							getRows();
+						}else{
+							commit();
+							addedRows = [];
+							generateDiff();
+						}
+					})
+				}
+
+				var getRows = () => {
+					client.query(`
+						WITH
+							res AS (${cache.query}),
+							res2 AS (
+								SELECT
+									MD5(CAST(ROW_TO_JSON(res.*) AS TEXT)) AS _hash,
+									res.*
+								FROM res)
+						SELECT * from res2
+						WHERE _hash IN ('${newHashes.join("','")}')
+					`, cache.params, (error, result) => {
+						if(error) return rollback(error);
+						// End transaction as soon as possible
+						commit();
+
+						addedRows = result.rows.map((row, index) => {
+							row._index = curHashes.indexOf(row._hash) + 1;
+							return row;
+						});
+
+						generateDiff();
+					})
+				}
+
+				var generateDiff = () => {
+					var removedHashes = oldHashes
+						.map((_hash, index) => { return { _hash, _index: index + 1 } })
+						.filter(removed => curHashes.indexOf(removed._hash) === -1);
+
+					var movedHashes = curHashes.map((hash, newIndex) => {
+						var oldIndex = oldHashes.indexOf(hash);
+						if(oldIndex !== -1 && oldIndex !== newIndex) {
+							return {
+								old_index: oldIndex + 1,
+								new_index: newIndex + 1,
+								_hash: hash
+							}
+						}
+					}).filter(moved => moved !== undefined);
+
+					var diff = {
+						removed: removedHashes.length !== 0 ? removedHashes : null,
+						moved: movedHashes.length !== 0 ? movedHashes: null,
+						added: addedRows.length !== 0 ? addedRows : null
+					};
+
+					if(diff.added === null &&
+							diff.moved === null &&
+							diff.removed === null) return;
+
+					var rows = cache.data =
+						this.calcUpdatedResultCache(cache.data, diff);
+
+					console.log('update', updateFunction, diff);
+					this.emit(updateFunction, diff, rows);
+				}
+
+				var rollback = (error) => {
+					this.emit('error', error);
+					client.query('ROLLBACK', (error, result) => {
+						if(error) return this.emit('error', error);
+					})
+				}
+
+				var commit = () => {
+					client.query('COMMIT', (error, result) => {
+						console.log('committin', error);
+						if(error) return this.emit('error', error);
+					})
+				}
+			});
+
+		});
 	}
 
-	calcUpdatedResultCache(updateFunction, diff) {
-		var oldResults = this.resultCache[updateFunction].data;
+	calcUpdatedResultCache(oldResults, diff) {
 		var newResults = oldResults.slice();
 
 		diff.removed !== null && diff.removed
@@ -201,8 +288,6 @@ class PgTriggers extends EventEmitter {
 			queries.push(`DROP TRIGGER IF EXISTS ${triggerName} ON ${table}`);
 			queries.push(`DROP FUNCTION IF EXISTS ${triggerName}()`);
 
-			queries = queries.concat(tablePromise.updateFunctions.map(
-				updateFunction => `DROP FUNCTION IF EXISTS ${updateFunction}()`));
 		});
 
 		return querySequence(this, queries, callback);

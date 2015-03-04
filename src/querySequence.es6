@@ -13,6 +13,7 @@ module.exports = function(client, debug, queries, callback){
 		queries  = debug;
 		debug    = false;
 	}
+	debug= true
 
 	return new Promise((resolve, reject) => {
 		var results = [];
