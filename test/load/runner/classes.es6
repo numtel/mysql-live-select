@@ -31,7 +31,7 @@ module.exports = _.flatten(_.range(instanceMultiplier).map(instance =>
 		if(diff.added) {
 			scoreIds = diff.added.map(row => row.score_id).join(',')
 		}
-		console.log('CLASS_UPDATE', Date.now(), scoreIds);
+		process.stdout.write(['CLASS_UPDATE', Date.now(), scoreIds].join(' '))
 	});
 
 	return select;

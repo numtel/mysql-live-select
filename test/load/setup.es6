@@ -143,7 +143,7 @@ var performRandom = {
 				Math.floor(Math.random() * fixtureData.scores.length)];
 
 			var classId = fixtureData.assignments[scoreRow.assignment_id - 1].class_id;
-		} while(classId > settings.maxSelect);
+		} while(classId > settings.maxSelects);
 
 		clientPromise.then(client => {
 			// Record operation time
@@ -151,7 +151,7 @@ var performRandom = {
 				scoreId: scoreRow.id,
 				time: Date.now()
 			});
-	// 		console.log('UPDATING', scoreRow.id);
+// 	 		console.log('UPDATING', scoreRow.id, classId);
 
 			client.query(
 				'UPDATE scores SET score = score + 1 WHERE id = $1', [ scoreRow.id ])
@@ -159,7 +159,12 @@ var performRandom = {
 	},
 	insert() {
 		// Select random assignment and student ids
-		var assignId = Math.floor(Math.random() * fixtureData.assignments.length) + 1;
+		do {
+			var assignId =
+				Math.floor(Math.random() * fixtureData.assignments.length) + 1;
+			var classId = fixtureData.assignments[assignId - 1].class_id;
+		} while(classId > settings.maxSelects);
+
 		var studentId = Math.floor(Math.random() * fixtureData.students.length) + 1;
 
 		var scoreId = fixtureData.scores.length + 1;
@@ -169,7 +174,7 @@ var performRandom = {
 				scoreId,
 				time: Date.now()
 			});
-// 	 		console.log('INSERTING', scoreId);
+// 	 		console.log('INSERTING', scoreId, classId, assignId);
 
 			fixtureData.scores.push({
 				id: scoreId,

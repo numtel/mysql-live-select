@@ -19,6 +19,10 @@ triggers.on('error', function(error) {
 var selects = require('./classes');
 
 setInterval(function() {
-	console.log('MEMORY_USAGE', Date.now(), process.memoryUsage().heapTotal);
+	process.stdout.write([
+		'MEMORY_USAGE',
+		Date.now(),
+		process.memoryUsage().heapTotal
+	].join(' '));
 }, 500);
 
