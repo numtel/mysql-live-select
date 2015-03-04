@@ -14,7 +14,7 @@ var args = parseArgs(process.argv.slice(2));
 var defaults = {
 	conn: 'postgres://meteor:meteor@127.0.0.1/meteor_test',
 	channel: 'load_test',
-	settings: 'settings1'
+	settings: 'static'
 };
 
 if(args.help === true){
@@ -29,7 +29,7 @@ global.options = _.object(_.map(defaults, function(value, key) {
 	return [ key, key in args ? args[key] : value ];
 }));
 
-global.settings = require('./' + options.settings);
+global.settings = require('./cases/' + options.settings);
 
 // Setup in ES6 file
 require('./setup');

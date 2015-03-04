@@ -135,58 +135,60 @@ var childPromise = new Promise((resolve, reject) => {
 }).catch(reason => console.error(reason));
 
 // Begin throttled test operations
-var performRandomUpdate = function() {
-	// Select random score record
-	do {
-		var scoreRow = fixtureData.scores[
-			Math.floor(Math.random() * fixtureData.scores.length)];
+var performRandom = {
+	update() {
+		// Select random score record
+		do {
+			var scoreRow = fixtureData.scores[
+				Math.floor(Math.random() * fixtureData.scores.length)];
 
-		var classId = fixtureData.assignments[scoreRow.assignment_id - 1].class_id;
-	} while(classId > settings.maxSelect);
+			var classId = fixtureData.assignments[scoreRow.assignment_id - 1].class_id;
+		} while(classId > settings.maxSelect);
 
-	clientPromise.then(client => {
-		// Record operation time
-		waitingOps.push({
-			scoreId: scoreRow.id,
-			time: Date.now()
+		clientPromise.then(client => {
+			// Record operation time
+			waitingOps.push({
+				scoreId: scoreRow.id,
+				time: Date.now()
+			});
+	// 		console.log('UPDATING', scoreRow.id);
+
+			client.query(
+				'UPDATE scores SET score = score + 1 WHERE id = $1', [ scoreRow.id ])
 		});
-// 		console.log('UPDATING', scoreRow.id);
+	},
+	insert() {
+		// Select random assignment and student ids
+		var assignId = Math.floor(Math.random() * fixtureData.assignments.length) + 1;
+		var studentId = Math.floor(Math.random() * fixtureData.students.length) + 1;
 
-		client.query(
-			'UPDATE scores SET score = score + 1 WHERE id = $1', [ scoreRow.id ])
-	});
-};
+		var scoreId = fixtureData.scores.length + 1;
 
-var performRandomInsert = function() {
-	// Select random assignment and student ids
-	var assignId = Math.floor(Math.random() * fixtureData.assignments.length) + 1;
-	var studentId = Math.floor(Math.random() * fixtureData.students.length) + 1;
+		clientPromise.then(client => {
+			waitingOps.push({
+				scoreId,
+				time: Date.now()
+			});
+// 	 		console.log('INSERTING', scoreId);
 
-	var scoreId = fixtureData.scores.length + 1;
+			fixtureData.scores.push({
+				id: scoreId,
+				assignment_id: assignId,
+				student_id: studentId,
+				score: 5
+			});
 
-	clientPromise.then(client => {
-		waitingOps.push({
-			scoreId,
-			time: Date.now()
+			client.query(
+				`INSERT INTO scores (id, assignment_id, student_id, score)
+					VALUES ($1, $2, $3, $4)`, [ scoreId, assignId, studentId, 5 ])
 		});
-// 		console.log('INSERTING', scoreId);
-
-		fixtureData.scores.push({
-			id: scoreId,
-			assignment_id: assignId,
-			student_id: studentId,
-			score: 5
-		});
-
-		client.query(
-			`INSERT INTO scores (id, assignment_id, student_id, score)
-				VALUES ($1, $2, $3, $4)`, [ scoreId, assignId, studentId, 5 ])
-	});
+	}
 };
 
 childPromise.then(() => {
 	console.log('\nLoad operations in progress...')
 
+	// Print elapsed time every 15 seconds for easy duration checking
 	var runTimeSeconds = 0;
 	setInterval(() => {
 		runTimeSeconds++;
@@ -195,23 +197,43 @@ childPromise.then(() => {
 		}
 	}, 1000);
 
-	settings.opPerSecond.insert &&
-		setInterval(performRandomInsert,
-			Math.ceil(1000 / settings.opPerSecond.insert));
+	var startTime = Date.now();
 
-	settings.opPerSecond.update &&
-		setInterval(performRandomUpdate,
-			Math.ceil(1000 / settings.opPerSecond.update));
+	var getInterval = valueFun => valueFun((Date.now() - startTime) / 1000);
+
+	_.forOwn(performRandom, (fun, key) => {
+		var value = settings.opPerSecond[key];
+		if(!value) return;
+
+		switch(typeof value) {
+			case 'number':
+				// Static value provided
+				setInterval(fun, Math.ceil(1000 / value))
+				break;
+			case 'function':
+				// Determined based on elapsed time
+				// Single argument receives (float) number of seconds elapsed
+				var nextOp = () => {
+					fun();
+					setTimeout(nextOp, Math.ceil(1000 / getInterval(value)));
+				}
+				setTimeout(nextOp, Math.ceil(1000 / getInterval(value)));
+				break;
+		}
+	});
 });
 
 
 process.on('SIGINT', () => {
 	clientDone && clientDone();
 
-// 	console.log('STILL waiting', waitingOps);
+	var filteredEvents = classUpdates.filter(evt => evt.responseTimes !== null)
+
 	console.log(
 		'Final Data Count \n',
-		'Scores: ', fixtureData.scores.length, '\n'
+		'Scores: ', fixtureData.scores.length, '\n',
+		'Responses Received: ', filteredEvents.length, '\n',
+		'Still Waiting for Response: ', waitingOps.length, '\n'
 	);
 
 	if(memoryUsage.length !== 0){
@@ -227,8 +249,6 @@ process.on('SIGINT', () => {
 		}));
 	}
 
-	var filteredEvents = classUpdates.filter(evt =>
-		evt.responseTimes !== null)
 	if(filteredEvents.length !== 0){
 		// Print response time graph
 // 		console.log(filteredEvents);
