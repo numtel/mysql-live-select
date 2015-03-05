@@ -198,12 +198,14 @@ class PgTriggers extends EventEmitter {
 				var rollback = (error) => {
 					this.emit('error', error);
 					client.query('ROLLBACK', (error, result) => {
+						done();
 						if(error) return this.emit('error', error);
 					})
 				}
 
 				var commit = () => {
 					client.query('COMMIT', (error, result) => {
+						done();
 						console.log('committin', error);
 						if(error) return this.emit('error', error);
 					})

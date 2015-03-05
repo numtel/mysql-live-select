@@ -482,4 +482,4 @@ exports.cases.allExpression = {
 	]
 }
 
-exports.cases = _.pick(exports.cases, 'innerJoin');
+exports.cases = _.pick(exports.cases, 'inExpression');
