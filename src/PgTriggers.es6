@@ -105,139 +105,101 @@ class PgTriggers extends EventEmitter {
 		this.waitingToUpdate.splice(0, updateCount).map(updateFunction => {
 			var cache = this.resultCache[updateFunction];
 			var curHashes, oldHashes, newHashes, addedRows;
-			// Run hash and result query in same transaction
-			this.getClient((error, client, done) => {
-				if(error) return this.emit('error', error);
+			oldHashes = cache.data.map(row => row._hash);
 
-				client.query('BEGIN', (error, result) => {
-					if(error) return this.emit('error', error);
-					getHashes();
-				})
-
-				var getHashes = () => {
-					client.query(`
-						WITH res AS (${cache.query})
+			querySequence(this, [ [ `
+				WITH
+					res AS (${cache.query}),
+					data AS (
 						SELECT
-							MD5(CAST(ROW_TO_JSON(res.*) AS TEXT)) AS _hash
-						FROM res
-					`, cache.params, (error, result) => {
-						if(error) return rollback(error);
+							MD5(CAST(ROW_TO_JSON(res.*) AS TEXT)) AS _hash,
+							res.*
+						FROM res),
+					data2 AS (
+						SELECT
+							1 AS _added,
+							data.*
+						FROM data
+						WHERE _hash NOT IN ('${oldHashes.join("','")}'))
+				SELECT
+					data2.*,
+					data._hash AS _hash
+				FROM data
+				LEFT JOIN data2
+					ON (data._hash = data2._hash)
+			`, cache.params ] ]).then(result => {
+// 				console.log(result[0].rows);
 
-						curHashes = result.rows.map(row => row._hash);
-						oldHashes = cache.data.map(row => row._hash);
-						newHashes = curHashes.filter(
-							hash => oldHashes.indexOf(hash) === -1);
+				curHashes = result[0].rows.map(row => row._hash);
+				newHashes = curHashes.filter(
+					hash => oldHashes.indexOf(hash) === -1);
 
-						if(newHashes.length) {
-							getRows();
-						}else{
-							commit();
-							addedRows = [];
-							generateDiff();
-						}
+				var curHashes2 = curHashes.slice();
+				addedRows = result[0].rows
+					.filter(row => row._added === 1)
+					.map((row, index) => {
+						row._index = curHashes2.indexOf(row._hash) + 1;
+						delete row._added;
+
+						// Clear this hash so that duplicate hashes can move forward
+						curHashes2[row._index - 1] = undefined;
+
+						return row;
 					})
-				}
 
-				var getRows = () => {
-					client.query(`
-						WITH
-							res AS (${cache.query}),
-							res2 AS (
-								SELECT
-									MD5(CAST(ROW_TO_JSON(res.*) AS TEXT)) AS _hash,
-									res.*
-								FROM res)
-						SELECT * from res2
-						WHERE _hash IN ('${newHashes.join("','")}')
-					`, cache.params, (error, result) => {
-						if(error) return rollback(error);
-						// End transaction as soon as possible
-						commit();
-
-						var curHashes2 = curHashes.slice();
-						addedRows = result.rows.map((row, index) => {
-							row._index = curHashes2.indexOf(row._hash) + 1;
-
-							// Clear this hash so that duplicate hashes can move forward
-							curHashes2[row._index - 1] = undefined;
-
-							return row;
-						});
-
-						generateDiff();
-					})
-				}
-
-				var generateDiff = () => {
-					var movedHashes = curHashes.map((hash, newIndex) => {
-						var oldIndex = oldHashes.indexOf(hash);
-						if(oldIndex !== -1 &&
-								oldIndex !== newIndex &&
-								curHashes[oldIndex] !== hash) {
-							return {
-								old_index: oldIndex + 1,
-								new_index: newIndex + 1,
-								_hash: hash
-							}
+				var movedHashes = curHashes.map((hash, newIndex) => {
+					var oldIndex = oldHashes.indexOf(hash);
+					if(oldIndex !== -1 &&
+							oldIndex !== newIndex &&
+							curHashes[oldIndex] !== hash) {
+						return {
+							old_index: oldIndex + 1,
+							new_index: newIndex + 1,
+							_hash: hash
 						}
-					}).filter(moved => moved !== undefined);
+					}
+				}).filter(moved => moved !== undefined);
 
-					var removedHashes = oldHashes
-						.map((_hash, index) => { return { _hash, _index: index + 1 } })
-						.filter(removed =>
-							curHashes[removed._index - 1] !== removed._hash &&
+				var removedHashes = oldHashes
+					.map((_hash, index) => { return { _hash, _index: index + 1 } })
+					.filter(removed =>
+						curHashes[removed._index - 1] !== removed._hash &&
+						movedHashes.filter(moved =>
+							moved.new_index === removed._index).length === 0);
+
+				// Add rows that have already existing hash but in new places
+				var copiedHashes = curHashes.map((hash, index) => {
+					var oldHashIndex = oldHashes.indexOf(hash);
+					if(oldHashIndex !== -1 &&
+							oldHashes[index] !== hash &&
 							movedHashes.filter(moved =>
-								moved.new_index === removed._index).length === 0);
-
-					// Add rows that have already existing hash but in new places
-					var copiedHashes = curHashes.map((hash, index) => {
-						var oldHashIndex = oldHashes.indexOf(hash);
-						if(oldHashIndex !== -1 &&
-								oldHashes[index] !== hash &&
-								movedHashes.filter(moved =>
-									moved.new_index - 1 === index).length === 0 &&
-								addedRows.filter(added =>
-									added._index - 1 === index).length === 0){
-							return {
-								new_index: index + 1,
-								orig_index: oldHashIndex + 1
-							}
+								moved.new_index - 1 === index).length === 0 &&
+							addedRows.filter(added =>
+								added._index - 1 === index).length === 0){
+						return {
+							new_index: index + 1,
+							orig_index: oldHashIndex + 1
 						}
-					}).filter(copied => copied !== undefined);
+					}
+				}).filter(copied => copied !== undefined);
 
-					var diff = {
-						removed: removedHashes.length !== 0 ? removedHashes : null,
-						moved: movedHashes.length !== 0 ? movedHashes: null,
-						copied: copiedHashes.length !== 0 ? copiedHashes: null,
-						added: addedRows.length !== 0 ? addedRows : null
-					};
+				var diff = {
+					removed: removedHashes.length !== 0 ? removedHashes : null,
+					moved: movedHashes.length !== 0 ? movedHashes: null,
+					copied: copiedHashes.length !== 0 ? copiedHashes: null,
+					added: addedRows.length !== 0 ? addedRows : null
+				};
 
-					if(diff.added === null &&
-							diff.moved === null &&
-							diff.copied === null &&
-							diff.removed === null) return;
+				if(diff.added === null &&
+						diff.moved === null &&
+						diff.copied === null &&
+						diff.removed === null) return;
 
-					var rows = cache.data =
-						this.calcUpdatedResultCache(cache.data, diff);
+				var rows = cache.data =
+					this.calcUpdatedResultCache(cache.data, diff);
 
-					this.emit(updateFunction, diff, rows);
-				}
-
-				var rollback = (error) => {
-					this.emit('error', error);
-					client.query('ROLLBACK', (error, result) => {
-						done();
-						if(error) return this.emit('error', error);
-					})
-				}
-
-				var commit = () => {
-					client.query('COMMIT', (error, result) => {
-						done();
-						if(error) return this.emit('error', error);
-					})
-				}
-			});
+				this.emit(updateFunction, diff, rows);
+			}, error => this.emit('error', error));
 
 		});
 	}
