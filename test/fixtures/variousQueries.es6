@@ -523,4 +523,3 @@ exports.cases.sortMoved = {
 	]
 }
 
-// exports.cases = _.pick(exports.cases, 'allExpression');

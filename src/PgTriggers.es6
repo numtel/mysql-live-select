@@ -107,12 +107,13 @@ class PgTriggers extends EventEmitter {
 			var curHashes, oldHashes, newHashes, addedRows;
 			oldHashes = cache.data.map(row => row._hash);
 
-			querySequence(this, [ [ `
+			querySequence.noTx(this, [ [ `
 				WITH
 					res AS (${cache.query}),
 					data AS (
 						SELECT
 							MD5(CAST(ROW_TO_JSON(res.*) AS TEXT)) AS _hash,
+							ROW_NUMBER() OVER () AS _index,
 							res.*
 						FROM res),
 					data2 AS (
@@ -126,10 +127,8 @@ class PgTriggers extends EventEmitter {
 					data._hash AS _hash
 				FROM data
 				LEFT JOIN data2
-					ON (data._hash = data2._hash)
+					ON (data._index = data2._index)
 			`, cache.params ] ]).then(result => {
-// 				console.log(result[0].rows);
-
 				curHashes = result[0].rows.map(row => row._hash);
 				newHashes = curHashes.filter(
 					hash => oldHashes.indexOf(hash) === -1);
