@@ -157,6 +157,8 @@ class PgTriggers extends EventEmitter {
 						var curHashes2 = curHashes.slice();
 						addedRows = result.rows.map((row, index) => {
 							row._index = curHashes2.indexOf(row._hash) + 1;
+
+							// Clear this hash so that duplicate hashes can move forward
 							curHashes2[row._index - 1] = undefined;
 
 							return row;
@@ -167,10 +169,6 @@ class PgTriggers extends EventEmitter {
 				}
 
 				var generateDiff = () => {
-					var removedHashes = oldHashes
-						.map((_hash, index) => { return { _hash, _index: index + 1 } })
-						.filter(removed => curHashes[removed._index - 1] !== removed._hash);
-
 					var movedHashes = curHashes.map((hash, newIndex) => {
 						var oldIndex = oldHashes.indexOf(hash);
 						if(oldIndex !== -1 &&
@@ -184,16 +182,25 @@ class PgTriggers extends EventEmitter {
 						}
 					}).filter(moved => moved !== undefined);
 
+					var removedHashes = oldHashes
+						.map((_hash, index) => { return { _hash, _index: index + 1 } })
+						.filter(removed =>
+							curHashes[removed._index - 1] !== removed._hash &&
+							movedHashes.filter(moved =>
+								moved.new_index === removed._index).length === 0);
+
 					// Add rows that have already existing hash but in new places
 					var copiedHashes = curHashes.map((hash, index) => {
-						if(oldHashes[index] !== hash &&
+						var oldHashIndex = oldHashes.indexOf(hash);
+						if(oldHashIndex !== -1 &&
+								oldHashes[index] !== hash &&
 								movedHashes.filter(moved =>
 									moved.new_index - 1 === index).length === 0 &&
 								addedRows.filter(added =>
-									added._index -1 === index).length === 0){
+									added._index - 1 === index).length === 0){
 							return {
 								new_index: index + 1,
-								orig_index: oldHashes.indexOf(hash) + 1
+								orig_index: oldHashIndex + 1
 							}
 						}
 					}).filter(copied => copied !== undefined);
@@ -242,17 +249,25 @@ class PgTriggers extends EventEmitter {
 			.forEach(removed => newResults[removed._index - 1] = undefined);
 
 		// Deallocate first to ensure no overwrites
-		diff.moved !== null && diff.moved
-			.forEach(moved => {
-				newResults[moved.old_index - 1] = undefined;
-			});
+		diff.moved !== null && diff.moved.forEach(moved => {
+			newResults[moved.old_index - 1] = undefined;
+		});
 
-		diff.moved !== null && diff.moved
-			.forEach(moved => {
-				var movingRow = oldResults[moved.old_index - 1];
-				movingRow._index = moved.new_index;
-				newResults[moved.new_index - 1] = movingRow;
-			});
+		diff.copied !== null && diff.copied.forEach(copied => {
+			var copyRow = _.clone(oldResults[copied.orig_index - 1]);
+			if(!copyRow){
+				// TODO why do some copied rows not exist in the old data?
+				console.log(copied, oldResults.length)
+			}
+			copyRow._index = copied.new_index;
+			newResults[copied.new_index - 1] = copyRow;
+		});
+
+		diff.moved !== null && diff.moved.forEach(moved => {
+			var movingRow = oldResults[moved.old_index - 1];
+			movingRow._index = moved.new_index;
+			newResults[moved.new_index - 1] = movingRow;
+		});
 
 		diff.added !== null && diff.added
 			.forEach(added => newResults[added._index - 1] = added);

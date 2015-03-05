@@ -10,8 +10,8 @@ module.exports = {
 	// TODO multiplier may cause issues at this point!
 	instanceMultiplier: 1,
 	opPerSecond: {
-		insert: 50,
-		update: 50,
+		insert: 90,
+		update: 90,
 		// TODO deletes not described in diff.added so not used
 		delete: 5
 	}
