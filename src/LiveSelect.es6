@@ -12,7 +12,6 @@ class LiveSelect extends EventEmitter {
 		this.query     = query;
 		this.params    = params || [];
 		this.ready     = false;
-		this.tablesUsed = [];
 
 		var rawHash = murmurHash(JSON.stringify([ query, params ]));
 		// Adjust hash value because Postgres integers are signed
@@ -37,10 +36,13 @@ class LiveSelect extends EventEmitter {
 		}else{
 			this.init = new Promise((resolve, reject) => {
 				parent.init.then(result => {
-					// Get initial results
-					parent.waitingToUpdate.push(this.updateFunction)
-
 					parent.registerQueryTriggers(this.query, this.updateFunction)
+						.then(() => {
+							// Get initial results
+							parent.waitingToUpdate.push(this.updateFunction);
+
+							resolve()
+						}, reject);
 				})
 			}, error => this.emit('error', error));
 

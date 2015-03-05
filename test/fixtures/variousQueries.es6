@@ -60,6 +60,7 @@ exports.cases.innerJoin = {
 		{ diff: {
 			removed: null,
 			moved: null,
+			copied: null,
 			added: 
 			 [ { _index: 1,
 					 student_name: 'Student 2',
@@ -83,6 +84,7 @@ exports.cases.innerJoin = {
 		{ diff: {
 			removed: null,
 			moved: null,
+			copied: null,
 			added: 
 			 [ { _index: 4,
 					 student_name: 'Student 1',
@@ -101,6 +103,7 @@ exports.cases.innerJoin = {
 		{ diff: {
 			removed: [ { _index: 4 } ],
 			moved: null,
+			copied: null,
 			added: 
 			 [ { _index: 4,
 					 student_name: 'Student 1',
@@ -113,6 +116,7 @@ exports.cases.innerJoin = {
 		{ diff: {
 			removed: [ { _index: 1 } ],
 			moved: null,
+			copied: null,
 			added: 
 			 [ { _index: 1,
 					 student_name: 'John Doe',
@@ -122,7 +126,11 @@ exports.cases.innerJoin = {
 		{ perform: [
 			`DELETE FROM scores WHERE id = 4`
 		] },
-		{ diff: { removed: [ { _index: 4 } ], moved: null, added: null } },
+		{ diff: {
+				removed: [ { _index: 4 } ],
+				moved: null,
+				copied: null,
+				added: null } },
 		{ perform: [
 			// assignment with different class_id, no changes
 			`INSERT INTO assignments (id, class_id, name, value) VALUES
@@ -394,6 +402,7 @@ exports.cases.fullJoin = {
 		{ diff: {
 				removed: null,
 				moved: null,
+				copied: null,
 				added: [ { _index: 6, name: null, value: null, score: 25 } ]
 		} }
 	]
@@ -436,6 +445,7 @@ exports.cases.inExpression = {
 		{ diff: {
 				removed: null,
 				moved: null,
+				copied: null,
 				added: 
 				 [ { _index: 1, is_54: false },
 					 { _index: 2, is_54: true },
@@ -446,7 +456,8 @@ exports.cases.inExpression = {
 		{ diff: {
 				removed: [ { _index: 2 } ],
 				moved: null,
-				added: [ { _index: 2, is_54: false } ] } },
+				copied: [ { new_index: 2, orig_index: 1 } ],
+				added: null } },
 	]
 }
 
@@ -467,6 +478,7 @@ exports.cases.allExpression = {
 		{ diff: {
 				removed: null,
 				moved: null,
+				copied: null,
 				added: 
 				 [ { _index: 1, is_lte_28: false },
 					 { _index: 2, is_lte_28: false },
@@ -477,9 +489,9 @@ exports.cases.allExpression = {
 		{ diff: {
 				removed: [ { _index: 2 } ],
 				moved: null,
-				added: [ { _index: 2, is_lte_28: true } ] 
+				copied: [ { new_index: 2, orig_index: 3 } ],
+				added: null
 		} },
 	]
 }
 
-exports.cases = _.pick(exports.cases, 'inExpression');

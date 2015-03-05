@@ -47,16 +47,11 @@ exports.variousQueries = function(test) {
 
 									var queries =
 										data.map(query => applyTableSuffixes(query, caseId));
-									console.log('PERFORMIN', queries);
 
 									querySequence(triggers, printDebug, queries).then(results => {
 										// Move to next event
-										console.log('movin on up', queries);
 										processEvents(callback, index + 1);
-									}, reason => {
-										console.error(reason);
-										reject(reason);
-									});
+									}, reject);
 									break
 								case 'diff':
 								case 'data':
@@ -67,24 +62,20 @@ exports.variousQueries = function(test) {
 										}, 100);
 									}
 									else {
-										console.log('UP IS IN', data);
 										// New update has arrived, check against data or diff
 										test.deepEqual(
 											orderByIndex(updateLog[nextLogPos][eventType]), data,
 											`${caseId} Difference on event #${nextLogPos}`);
 
 										// Move to next event
-										console.log('move out!');
 										processEvents(callback, index + 1);
 									}
 									break
 								case 'unchanged':
-									console.log('UNCHANGED', data);
 									setTimeout(() => {
 										test.equal(updateLog.length, nextLogPos,
 											`${caseId} Unexpected update on unchanged #${nextLogPos}:
 												${JSON.stringify(updateLog[updateLog.length - 1])}`);
-										console.log('mover ooter');
 
 										// Move to next event
 										processEvents(callback, index + 1);

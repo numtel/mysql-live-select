@@ -66,7 +66,7 @@ class PgTriggers extends EventEmitter {
 		var { channel, triggerTables } = this;
 		return new Promise((resolve, reject) => {
 			this.getQueryTables(query).then(tables => {
-				tables.forEach(table => {
+				Promise.all(tables.map(table => {
 					if(!(table in triggerTables)) {
 						// Create the trigger for this table on this channel
 						var triggerName = `${channel}_${table}`;
@@ -85,14 +85,15 @@ class PgTriggers extends EventEmitter {
 								EXECUTE PROCEDURE ${triggerName}()`
 						]).catch(error => this.emit('error', error));
 
-						triggerTables[table].updateFunctions = [];
+						triggerTables[table].updateFunctions = [ updateFunction ];
+						return triggerTables[table];
+					}else{
+						if(triggerTables[table].updateFunctions.indexOf(updateFunction) === -1){
+							triggerTables[table].updateFunctions.push(updateFunction);
+						}
+						return Promise.resolve();
 					}
-
-					if(triggerTables[table].updateFunctions.indexOf(updateFunction) === -1){
-						triggerTables[table].updateFunctions.push(updateFunction);
-					}
-				});
-				resolve(tables);
+				})).then(() => { resolve(tables) }, reject);
 			}, reject);
 		});
 	}
@@ -153,8 +154,11 @@ class PgTriggers extends EventEmitter {
 						// End transaction as soon as possible
 						commit();
 
+						var curHashes2 = curHashes.slice();
 						addedRows = result.rows.map((row, index) => {
-							row._index = curHashes.indexOf(row._hash) + 1;
+							row._index = curHashes2.indexOf(row._hash) + 1;
+							curHashes2[row._index - 1] = undefined;
+
 							return row;
 						});
 
@@ -165,11 +169,13 @@ class PgTriggers extends EventEmitter {
 				var generateDiff = () => {
 					var removedHashes = oldHashes
 						.map((_hash, index) => { return { _hash, _index: index + 1 } })
-						.filter(removed => curHashes.indexOf(removed._hash) === -1);
+						.filter(removed => curHashes[removed._index - 1] !== removed._hash);
 
 					var movedHashes = curHashes.map((hash, newIndex) => {
 						var oldIndex = oldHashes.indexOf(hash);
-						if(oldIndex !== -1 && oldIndex !== newIndex) {
+						if(oldIndex !== -1 &&
+								oldIndex !== newIndex &&
+								curHashes[oldIndex] !== hash) {
 							return {
 								old_index: oldIndex + 1,
 								new_index: newIndex + 1,
@@ -178,20 +184,35 @@ class PgTriggers extends EventEmitter {
 						}
 					}).filter(moved => moved !== undefined);
 
+					// Add rows that have already existing hash but in new places
+					var copiedHashes = curHashes.map((hash, index) => {
+						if(oldHashes[index] !== hash &&
+								movedHashes.filter(moved =>
+									moved.new_index - 1 === index).length === 0 &&
+								addedRows.filter(added =>
+									added._index -1 === index).length === 0){
+							return {
+								new_index: index + 1,
+								orig_index: oldHashes.indexOf(hash) + 1
+							}
+						}
+					}).filter(copied => copied !== undefined);
+
 					var diff = {
 						removed: removedHashes.length !== 0 ? removedHashes : null,
 						moved: movedHashes.length !== 0 ? movedHashes: null,
+						copied: copiedHashes.length !== 0 ? copiedHashes: null,
 						added: addedRows.length !== 0 ? addedRows : null
 					};
 
 					if(diff.added === null &&
 							diff.moved === null &&
+							diff.copied === null &&
 							diff.removed === null) return;
 
 					var rows = cache.data =
 						this.calcUpdatedResultCache(cache.data, diff);
 
-					console.log('update', updateFunction, diff);
 					this.emit(updateFunction, diff, rows);
 				}
 
@@ -206,7 +227,6 @@ class PgTriggers extends EventEmitter {
 				var commit = () => {
 					client.query('COMMIT', (error, result) => {
 						done();
-						console.log('committin', error);
 						if(error) return this.emit('error', error);
 					})
 				}
