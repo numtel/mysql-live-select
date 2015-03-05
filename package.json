@@ -15,7 +15,7 @@
 	},
 	"scripts": {
 		"start"      : "node ./lib/index.js",
-		"make"       : "6to5 src --out-dir lib",
+		"make"       : "babel src --optional runtime --out-dir lib",
 		"make-start" : "npm run make && npm start",
 		"test"       : "CONN=\"postgres://meteor:meteor@127.0.0.1/meteor_test\" CHANNEL=\"package_test\" DEBUG=0 STATS=1 nodeunit test/index.js"
 	},
@@ -24,7 +24,7 @@
 		"notify"
 	],
 	"devDependencies": {
-		"babel"             : "^4.3.0",
+		"babel"             : "^4.6.6",
 		"nodeunit"          : "~0.9.0",
 		"minimist"          : "^1.1.0",
 		"babar"             : "0.0.3",
@@ -32,6 +32,7 @@
 		"console.table"     : "0.4.0"
 	},
 	"dependencies": {
+		"babel-runtime" : "^4.6.6",
 		"pg"            : "^4.2.0",
 		"lodash"        : "^3.1.0",
 		"deep-diff"     : "^0.3.0",
