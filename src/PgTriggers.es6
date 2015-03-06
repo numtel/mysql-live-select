@@ -62,40 +62,44 @@ class PgTriggers extends EventEmitter {
 		return newSelect
 	}
 
-	registerQueryTriggers(query, updateFunction) {
+	async registerQueryTriggers(query, updateFunction) {
 		var { channel, triggerTables } = this;
-		return new Promise((resolve, reject) => {
-			this.getQueryTables(query).then(tables => {
-				Promise.all(tables.map(table => {
-					if(!(table in triggerTables)) {
-						// Create the trigger for this table on this channel
-						var triggerName = `${channel}_${table}`;
 
-						triggerTables[table] = querySequence(this, [
-							`CREATE OR REPLACE FUNCTION ${triggerName}() RETURNS trigger AS $$
-								BEGIN
-									NOTIFY "${channel}", '${table}';
-									RETURN NULL;
-								END;
-							$$ LANGUAGE plpgsql`,
-							`DROP TRIGGER IF EXISTS "${triggerName}"
-								ON "${table}"`,
-							`CREATE TRIGGER "${triggerName}"
-								AFTER INSERT OR UPDATE OR DELETE ON "${table}"
-								EXECUTE PROCEDURE ${triggerName}()`
-						]).catch(error => this.emit('error', error));
+		var tables = await this.getQueryTables(query);
 
-						triggerTables[table].updateFunctions = [ updateFunction ];
-						return triggerTables[table];
-					}else{
-						if(triggerTables[table].updateFunctions.indexOf(updateFunction) === -1){
-							triggerTables[table].updateFunctions.push(updateFunction);
-						}
-						return Promise.resolve();
-					}
-				})).then(() => { resolve(tables) }, reject);
-			}, reject);
-		});
+		for(var i = 0; i<tables.length; i++){
+			let table = tables[i]
+
+			if(!(table in triggerTables)) {
+				// Create the trigger for this table on this channel
+				var triggerName = `${channel}_${table}`;
+
+				triggerTables[table] = querySequence(this, [
+					`CREATE OR REPLACE FUNCTION ${triggerName}() RETURNS trigger AS $$
+						BEGIN
+							NOTIFY "${channel}", '${table}';
+							RETURN NULL;
+						END;
+					$$ LANGUAGE plpgsql`,
+					`DROP TRIGGER IF EXISTS "${triggerName}"
+						ON "${table}"`,
+					`CREATE TRIGGER "${triggerName}"
+						AFTER INSERT OR UPDATE OR DELETE ON "${table}"
+						EXECUTE PROCEDURE ${triggerName}()`
+				]);
+
+				triggerTables[table].updateFunctions = [ updateFunction ];
+
+			}else{
+				if(triggerTables[table].updateFunctions.indexOf(updateFunction) === -1){
+					triggerTables[table].updateFunctions.push(updateFunction);
+				}
+			}
+
+			await triggerTables[table];
+		}
+
+		return tables;
 	}
 
 	refresh() {
