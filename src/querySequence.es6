@@ -19,7 +19,7 @@ module.exports = function(client, debug, queries, callback){
 
 		if(typeof client.getClient === 'function'){
 			// PgTriggers instance passed as client, obtain client
-			return client.getClient((error, client, done) =>
+			return client.getClientOld((error, client, done) =>
 				module.exports(client, debug, queries, callback).then(
 					results => { done(); resolve(results) },
 					error => { done(); reject(error) }))
@@ -93,7 +93,7 @@ module.exports.noTx = function(client, debug, queries, callback) {
 
 		if(typeof client.getClient === 'function'){
 			// PgTriggers instance passed as client, obtain client
-			return client.getClient((error, client, done) =>
+			return client.getClientOld((error, client, done) =>
 				module.exports(client, debug, queries, callback).then(
 					results => { done(); resolve(results) },
 					error => { done(); reject(error) }))
@@ -137,4 +137,5 @@ module.exports.noTx = function(client, debug, queries, callback) {
 		sequence[0]()
 	})
 }
+
 

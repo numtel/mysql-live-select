@@ -25,7 +25,7 @@ class PgTriggers extends EventEmitter {
 
 		this.init = new Promise((resolve, reject) => {
 			// Reserve one client to listen for notifications
-			this.getClient((error, client, done) => {
+			this.getClientOld((error, client, done) => {
 				if(error) return this.emit('error', error);
 
 				this.notifyClient     = client;
@@ -52,8 +52,17 @@ class PgTriggers extends EventEmitter {
 		})
 	}
 
-	getClient(cb) {
+	getClientOld(cb) {
 		pg.connect(this.connectionString, cb);
+	}
+
+	getClient() {
+		return new Promise((resolve, reject) => {
+			pg.connect(this.connectionString, (error, client, done) => {
+				if(error) reject(error)
+				else resolve({ client, done })
+			})
+		})
 	}
 
 	select(query, params) {
@@ -67,9 +76,7 @@ class PgTriggers extends EventEmitter {
 
 		var tables = await this.getQueryTables(query);
 
-		for(var i = 0; i<tables.length; i++){
-			let table = tables[i]
-
+		for(let table of tables){
 			if(!(table in triggerTables)) {
 				// Create the trigger for this table on this channel
 				var triggerName = `${channel}_${table}`;
@@ -111,7 +118,7 @@ class PgTriggers extends EventEmitter {
 			var curHashes, oldHashes, newHashes, addedRows;
 			oldHashes = cache.data.map(row => row._hash);
 
-			querySequence.noTx(this, [ [ `
+			this.querySequence([ [ `
 				WITH
 					res AS (${cache.query}),
 					data AS (
@@ -294,7 +301,44 @@ class PgTriggers extends EventEmitter {
 
 		return querySequence(this, queries, callback);
 	}
+
+	async querySequence(queries, client) {
+		var results = []
+
+		if(queries.length === 0) return results
+
+		if(!client) {
+			var connection = await this.getClient()
+			client = connection.client
+		}
+
+		for(let query of queries){
+			results.push(await performQuery(client, query))
+		}
+
+		if(connection) {
+			connection.done()
+		}
+
+		return results
+	}
 }
 
 module.exports = PgTriggers;
+
+function performQuery(client, query) {
+	return new Promise((resolve, reject) => {
+		var queryComplete = (error, rows, fields) => {
+			if(error) reject(error)
+			else resolve(rows)
+		}
+
+		if(query instanceof Array) {
+			client.query(query[0], query[1], queryComplete)
+		}
+		else {
+			client.query(query, queryComplete)
+		}
+	})
+}
 
