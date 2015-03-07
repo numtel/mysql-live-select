@@ -1,8 +1,8 @@
 {
-	"name"        : "pg-notify-trigger",
+	"name"        : "pg-live-select",
 	"version"     : "0.0.1",
-	"description" : "Trigger notify for specific row change events",
-	"main"        : "lib/PgTriggers.js",
+	"description" : "Provide realtime updates on SELECT statements",
+	"main"        : "lib/LiveSQL.js",
 	"author"      : "numtel <ben@latenightsketches.com>",
 	"license"     : "TBD",
 	"repository"  : "https://git.focus-sis.com/beng/pg-notify-trigger.git",
@@ -32,10 +32,11 @@
 		"console.table"     : "0.4.0"
 	},
 	"dependencies": {
-		"babel-runtime" : "^4.6.6",
-		"pg"            : "^4.2.0",
-		"lodash"        : "^3.1.0",
-		"deep-diff"     : "^0.3.0",
-		"murmurhash-js" : "^1.0.0"
+		"babel-runtime"  : "^4.6.6",
+		"pg"             : "^4.2.0",
+		"lodash"         : "^3.1.0",
+		"murmurhash-js"  : "^1.0.0",
+		"random-strings" : "^0.0.1",
+		"extend"         : "^2.0.0"
 	}
 }
