@@ -1,5 +1,5 @@
-var _          = require('lodash');
-var murmurHash = require('murmurhash-js').murmur3;
+var _          = require('lodash')
+var murmurHash = require('murmurhash-js').murmur3
 
 var common     = require('./common')
 
@@ -32,9 +32,14 @@ class LiveSQL {
 			}
 		})
 
-		this.updateInterval =
-			setInterval(this.refresh.bind(this), THROTTLE_INTERVAL)
+		this.updateInterval = setInterval(() => {
+			let queriesToUpdate =
+				_.uniq(this.waitingToUpdate.splice(0, this.waitingToUpdate.length))
 
+			for(let queryHash of queriesToUpdate) {
+				this._updateQuery(queryHash)
+			}
+		}.bind(this), THROTTLE_INTERVAL)
 	}
 
 	async select(query, params, onUpdate) {
@@ -61,16 +66,16 @@ class LiveSQL {
 			if(bufferData.length !== 0) {
 				// Initial results from cache
 				onUpdate(
-					{ removed: null, moved: null, added: queryBuffer.data },
+					{ removed: null, moved: null, copied: null, added: queryBuffer.data },
 					queryBuffer.data)
 			}
 		}
 		else {
 			// Initialize result set cache
 			this.selectBuffer[queryHash] = {
+				query,
+				params,
 				data     : [],
-				query    : query,
-				params   : params,
 				handlers : [ onUpdate ]
 			}
 
@@ -118,33 +123,26 @@ class LiveSQL {
 		return { stop }
 	}
 
-	async refresh() {
-		let updateCount = this.waitingToUpdate.length
-		if(updateCount === 0) return
-
-		let queriesToUpdate = _.uniq(this.waitingToUpdate.splice(0, updateCount))
+	async _updateQuery(queryHash) {
 		let pgHandle = await common.getClient(this.connStr)
 
-		for(let queryHash of queriesToUpdate) {
-			let queryBuffer = this.selectBuffer[queryHash]
-			let diff = await common.getResultSetDiff(
-				pgHandle.client,
-				queryBuffer.data,
-				queryBuffer.query,
-				queryBuffer.params)
+		let queryBuffer = this.selectBuffer[queryHash]
+		let diff = await common.getResultSetDiff(
+			pgHandle.client,
+			queryBuffer.data,
+			queryBuffer.query,
+			queryBuffer.params)
 
+		pgHandle.done()
+		pgHandle = null
+
+		if(diff !== null) {
 			queryBuffer.data = common.applyDiff(queryBuffer.data, diff)
 
 			for(let updateHandler of queryBuffer.handlers) {
 				updateHandler(diff, queryBuffer.data)
 			}
 		}
-
-		pgHandle.done()
-		pgHandle = null
-
-		updateCount = null
-		queriesToUpdate = null
 	}
 
 	async cleanup() {
