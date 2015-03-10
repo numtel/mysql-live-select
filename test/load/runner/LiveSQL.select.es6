@@ -1,6 +1,18 @@
-var _ = require('lodash');
+var _ = require('lodash')
+var LiveSQL = require('../../../')
+
+var liveDb = new LiveSQL(options.conn, options.channel)
+
+liveDb.on('error', function(error) {
+	console.error(error)
+})
+
 var selectCount = 
-	maxSelects && maxSelects < classCount ? maxSelects : classCount;
+	settings.maxSelects && settings.maxSelects < settings.init.classCount ?
+		settings.maxSelects : settings.init.classCount
+
+var instanceMultiplier =
+	settings.instanceMultiplier ? settings.instanceMultiplier : 1
 
 module.exports = _.flatten(_.range(instanceMultiplier).map(instance =>
 	_.range(selectCount).map(index => {
@@ -25,13 +37,13 @@ module.exports = _.flatten(_.range(instanceMultiplier).map(instance =>
 		ORDER BY
 			score_id ASC
 	`, [ index + 1 ], (diff, rows) => {
-		var scoreIds = '';
+		var scoreIds = ''
 		if(diff.added) {
 			scoreIds = diff.added.map(row => row.score_id + '@' + row.score).join(',')
 		}
 		process.stdout.write(['CLASS_UPDATE', Date.now(), index + 1, scoreIds].join(' '))
-	});
+	})
 
-	return select;
-})));
+	return select
+})))
 

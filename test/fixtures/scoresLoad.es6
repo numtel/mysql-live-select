@@ -1,7 +1,7 @@
-var _ = require('lodash');
+var _ = require('lodash')
 
-var randomString  = require('random-strings');
-var querySequence = require('../helpers/querySequence');
+var randomString  = require('random-strings')
+var querySequence = require('../helpers/querySequence')
 
 /**
  * Generate data structure describing a random scores set
@@ -12,16 +12,16 @@ var querySequence = require('../helpers/querySequence');
  */
 exports.generate =
 function(classCount, assignPerClass, studentsPerClass, classesPerStudent) {
-	var studentCount = Math.ceil(classCount / classesPerStudent) * studentsPerClass;
-	var assignCount  = classCount * assignPerClass;
-	var scoreCount   = assignCount * studentsPerClass;
+	var studentCount = Math.ceil(classCount / classesPerStudent) * studentsPerClass
+	var assignCount  = classCount * assignPerClass
+	var scoreCount   = assignCount * studentsPerClass
 
 	var students = _.range(studentCount).map(index => {
 		return {
 			id   : index + 1,
 			name : randomString.alphaLower(10)
 		}
-	});
+	})
 
 	var assignments = _.range(assignCount).map(index => {
 		return {
@@ -30,12 +30,12 @@ function(classCount, assignPerClass, studentsPerClass, classesPerStudent) {
 			name     : randomString.alphaLower(10),
 			value    : Math.ceil(Math.random() * 100)
 		}
-	});
+	})
 
 	var scores = _.range(scoreCount).map(index => {
-		var assignId = Math.floor(index / studentsPerClass) + 1;
+		var assignId = Math.floor(index / studentsPerClass) + 1
 		var baseStudent =
-			Math.floor((assignments[assignId - 1].class_id - 1) / classesPerStudent);
+			Math.floor((assignments[assignId - 1].class_id - 1) / classesPerStudent)
 
 		return {
 			id            : index + 1,
@@ -44,16 +44,16 @@ function(classCount, assignPerClass, studentsPerClass, classesPerStudent) {
 			                (index % studentsPerClass) + 1,
 			score         : Math.ceil(Math.random() * assignments[assignId - 1].value)
 		}
-	});
+	})
 
-	return { assignments, students, scores };
-};
+	return { assignments, students, scores }
+}
 
 function columnTypeFromName(name) {
 	switch(name){
-		case 'id'   : return 'serial NOT NULL';
-		case 'name' : return 'character varying(50) NOT NULL';
-		default     : return 'integer NOT NULL';
+		case 'id'   : return 'serial NOT NULL'
+		case 'name' : return 'character varying(50) NOT NULL'
+		default     : return 'integer NOT NULL'
 	}
 }
 
@@ -74,20 +74,20 @@ exports.install = function(generation) {
 					.map(column => `${column} ${columnTypeFromName(column)}`).join(', ')},
 				CONSTRAINT ${table}_pkey PRIMARY KEY (id)
 			) WITH ( OIDS=FALSE )`
-		];
+		]
 
 		// Insert max 500 rows per query
 		installQueries = installQueries.concat(_.chunk(rows, 500).map(rowShard => {
-			var valueCount = 0;
+			var valueCount = 0
 			return [`INSERT INTO ${table}
 					(${_.keys(rowShard[0]).join(', ')})
 				 VALUES	${rowShard.map(row =>
 					`(${_.map(row, () => '$' + ++valueCount).join(', ')})`).join(', ')}`,
 			 _.flatten(rowShard.map(row => _.values(row))) ]
-		}));
+		}))
 
 		return querySequence(installQueries)
-	}));
+	}))
 
 }
 

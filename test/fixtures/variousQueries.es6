@@ -1,9 +1,9 @@
 /**
  * Describe cases against data to fed into fixtures/scoresLoad.es6 :: install()
  */
-var _ = require('lodash');
+var _ = require('lodash')
 
-const UNCHANGED_WAIT = 300;
+const UNCHANGED_WAIT = 300
 
 exports.data = {
 	assignments: [

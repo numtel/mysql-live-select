@@ -1,28 +1,18 @@
-require('babel/register');
+require('babel/register')({ playground: true })
 
-var _ = require('lodash');
+global.options  = JSON.parse(process.argv[2])
+global.settings = JSON.parse(process.argv[3])
 
-global.connStr            = process.argv[2];
-global.channel            = process.argv[3];
-global.classCount         = parseInt(process.argv[4], 10);
-global.instanceMultiplier = parseInt(process.argv[5], 10);
-global.maxSelects         = parseInt(process.argv[6], 10);
-
-var LiveSQL = require('../../../');
-
-global.liveDb = new LiveSQL(connStr, channel);
-
-liveDb.on('error', function(error) {
-	console.error(error);
-});
-
-var selects = require('./classes');
+var runner = require(
+	settings.customRunner ? './' + settings.customRunner : './LiveSQL.select')
 
 setInterval(function() {
+	var mem = process.memoryUsage()
 	process.stdout.write([
 		'MEMORY_USAGE',
 		Date.now(),
-		process.memoryUsage().heapTotal
-	].join(' '));
-}, 500);
+		mem.heapTotal,
+		mem.heapUsed,
+	].join(' '))
+}, 500)
 
