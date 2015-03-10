@@ -8,11 +8,11 @@ global.classCount         = parseInt(process.argv[4], 10);
 global.instanceMultiplier = parseInt(process.argv[5], 10);
 global.maxSelects         = parseInt(process.argv[6], 10);
 
-var PgTriggers = require('../../../');
+var LiveSQL = require('../../../');
 
-global.triggers = new PgTriggers(connStr, channel);
+global.liveDb = new LiveSQL(connStr, channel);
 
-triggers.on('error', function(error) {
+liveDb.on('error', function(error) {
 	console.error(error);
 });
 

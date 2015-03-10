@@ -14,13 +14,15 @@ global.printStats = process.env.STATS === '1';
 global.isLoadTest = process.env.LOAD_TEST === '1';
 
 // ES6 may be used in all files required by this one
-require('babel/register');
+require('babel/register')({
+	playground: true
+});
 
 var _          = require('lodash');
-var PgTriggers = require('../');
+var LiveSQL = require('../');
 
 // Define global instance
-global.triggers   = new PgTriggers(process.env.CONN, process.env.CHANNEL);
+global.liveDb   = new LiveSQL(process.env.CONN, process.env.CHANNEL);
 
 if(isLoadTest) {
 	module.exports = _.assign(

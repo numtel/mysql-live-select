@@ -3,7 +3,9 @@
  */
 
 // ES6 may be used in all files required by this one
-require('babel/register');
+require('babel/register')({
+	playground: true
+});
 
 var _ = require('lodash');
 var parseArgs = require('minimist');

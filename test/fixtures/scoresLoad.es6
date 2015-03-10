@@ -1,7 +1,7 @@
 var _ = require('lodash');
 
-var randomString  = require('../helpers/randomString');
-var querySequence = require('../../src/querySequence');
+var randomString  = require('random-strings');
+var querySequence = require('../helpers/querySequence');
 
 /**
  * Generate data structure describing a random scores set
@@ -19,7 +19,7 @@ function(classCount, assignPerClass, studentsPerClass, classesPerStudent) {
 	var students = _.range(studentCount).map(index => {
 		return {
 			id   : index + 1,
-			name : randomString()
+			name : randomString.alphaLower(10)
 		}
 	});
 
@@ -27,7 +27,7 @@ function(classCount, assignPerClass, studentsPerClass, classesPerStudent) {
 		return {
 			id       : index + 1,
 			class_id : (index % classCount) + 1,
-			name     : randomString(),
+			name     : randomString.alphaLower(10),
 			value    : Math.ceil(Math.random() * 100)
 		}
 	});
@@ -59,17 +59,11 @@ function columnTypeFromName(name) {
 
 /**
  * Create/replace test tables filled with fixture data
- * @param  Object   triggersInstance Instance of PgTriggers or pg client
  * @param  Object   generatation     Output from generate() function above
  * @return Promise
  */
-exports.install = function(triggersInstance, generation) {
+exports.install = function(generation) {
 	return Promise.all(_.map(generation, (rows, table) => {
-
-		// Reset PgTriggers trigger cache so that triggers are recreated if needed
-		if('triggerTables' in triggersInstance) {
-			delete triggersInstance.triggerTables[table];
-		}
 
 		// Create tables, Insert data
 		var installQueries = [
@@ -92,7 +86,7 @@ exports.install = function(triggersInstance, generation) {
 			 _.flatten(rowShard.map(row => _.values(row))) ]
 		}));
 
-		return querySequence(triggersInstance, installQueries)
+		return querySequence(installQueries)
 	}));
 
 }

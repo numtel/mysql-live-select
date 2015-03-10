@@ -1,7 +1,6 @@
 var _ = require('lodash');
 
-var randomString          = require('./helpers/randomString');
-var querySequence         = require('../src/querySequence');
+var querySequence         = require('./helpers/querySequence');
 var scoresLoadFixture     = require('./fixtures/scoresLoad');
 var variousQueriesFixture = require('./fixtures/variousQueries');
 
@@ -20,14 +19,13 @@ exports.variousQueries = function(test) {
 			// Modify table names in query
 			var query = applyTableSuffixes(details.query, caseId);
 
-			scoresLoadFixture.install(triggers, fixtureData)
+			scoresLoadFixture.install(fixtureData)
 				.catch(error => console.error(error))
 				.then(result => {
-					var select     = triggers.select(query);
 					var updateLog  = []; // Cache for any updates to this query
 					var nextLogPos = 0; // Length at last action performed
-
-					select.on('update', (diff, data) => updateLog.push({ diff, data }));
+					var select     = liveDb.select(query, (diff, data) =>
+						updateLog.push({ diff, data }));
 
 					// For each event, check values or perform action, then continue
 					var processEvents = (callback, index) => {
@@ -48,7 +46,7 @@ exports.variousQueries = function(test) {
 									var queries =
 										data.map(query => applyTableSuffixes(query, caseId));
 
-									querySequence(triggers, printDebug, queries).then(results => {
+									querySequence(queries).then(results => {
 										// Move to next event
 										processEvents(callback, index + 1);
 									}, reject);
@@ -87,7 +85,10 @@ exports.variousQueries = function(test) {
 							}
 						})
 					}
-					processEvents(() => { select.stop(); resolve() })
+					processEvents(() => {
+						select.then(handle => handle.stop())
+						resolve()
+					})
 				})
 		})
 	)).then(() => test.done());

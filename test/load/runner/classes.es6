@@ -5,7 +5,7 @@ var selectCount =
 module.exports = _.flatten(_.range(instanceMultiplier).map(instance =>
 	_.range(selectCount).map(index => {
 
-	var select = triggers.select(`
+	var select = liveDb.select(`
 		SELECT
 			students.name  AS student_name,
 			students.id    AS student_id,
@@ -24,12 +24,10 @@ module.exports = _.flatten(_.range(instanceMultiplier).map(instance =>
 			assignments.class_id = $1
 		ORDER BY
 			score_id ASC
-	`, [ index + 1 ]);
-
-	select.on('update', (diff, rows) => {
+	`, [ index + 1 ], (diff, rows) => {
 		var scoreIds = '';
 		if(diff.added) {
-			scoreIds = diff.added.map(row => row.score_id).join(',')
+			scoreIds = diff.added.map(row => row.score_id + '@' + row.score).join(',')
 		}
 		process.stdout.write(['CLASS_UPDATE', Date.now(), index + 1, scoreIds].join(' '))
 	});

@@ -1,7 +1,7 @@
 var _ = require('lodash');
 
-var randomString = require('./helpers/randomString');
-var querySequence = require('../src/querySequence');
+var randomString = require('random-strings');
+var querySequence = require('./helpers/querySequence');
 
 var scoresLoadFixture = require('./fixtures/scoresLoad');
 
@@ -35,7 +35,8 @@ exports.scoresLoad = function(test) {
 		6           // classes per student
 	);
 	// Generate new names to update to
-	var newStudentNames = fixtureData.students.map(student => randomString());
+	var newStudentNames = fixtureData.students.map(student =>
+		randomString.alphaLower(10));
 
 	printStats && console.log(
 		'Students.length: ', fixtureData.students.length,
@@ -46,13 +47,14 @@ exports.scoresLoad = function(test) {
 	printDebug && console.log('FIXTURE DATA\n', fixtureData);
 
 	printStats && console.time('score data install');
-	scoresLoadFixture.install(triggers, fixtureData).then(result => {
+	scoresLoadFixture.install(fixtureData).then(result => {
 		printStats && console.timeEnd('score data install');
 
+		var curStage = 0;
 		var liveSelects = [];
 		_.range(selectsPerClass).forEach(selectIndex => {
 			liveSelects = liveSelects.concat(_.range(classCount).map(index =>
-				triggers.select(`
+				liveDb.select(`
 					SELECT
 						students.name  AS student_name,
 						students.id    AS student_id,
@@ -69,9 +71,61 @@ exports.scoresLoad = function(test) {
 						(students.id = scores.student_id)
 					WHERE
 						assignments.class_id = $1
-				`, [ index + 1 ])));
+				`, [ index + 1 ], (diff) => {
+					switch(curStage){
+						case 0:
+							readyCount++;
+							initialData[index] = diff.added;
+
+							if(readyCount === liveSelects.length){
+								printDebug && console.log('INITIAL UPDATE\n', initialData);
+
+								curStage++;
+								readyCount = 0;
+
+								// May happen before or after ready
+								updateStudentNames();
+							}
+							break;
+						case 1:
+							readyCount++;
+							test.ok(diff.added
+								.map(change =>
+									change.student_name ===
+										newStudentNames[change.student_id - 1])
+								.indexOf(false) === -1, 'Student name update check');
+
+							if(readyCount === liveSelects.length){
+								printStats && console.time('student names changed on instances');
+								curStage++;
+								readyCount = 0;
+
+								updateScores();
+							}
+							break;
+						case 2:
+							diff.added.forEach(change => {
+								if(change.score ===
+										fixtureData.scores[change.score_id - 1].score * 2) {
+									_.pull(updatedScoreIds, change.score_id)
+								}
+							});
+
+							if(updatedScoreIds.length === 0){
+								if(printStats){
+									console.timeEnd('scores updated on instances');
+									clearInterval(memoryInterval);
+									console.log(JSON.stringify(memoryUsageSnapshots));
+								}
+								// Make sure all are stopped
+								liveSelects.forEach(thisSelect =>
+									thisSelect.then(handle => handle.stop()));
+								test.done();
+							}
+							break;
+					}
+				})));
 		});
-		var curStage = 0;
 
 		// Stage 0 : cache initial data
 		var initialData = []
@@ -79,20 +133,18 @@ exports.scoresLoad = function(test) {
 
 		// Stage 1 : update each student name
 		var updateStudentNames = function() {
-			if(liveSelects.filter(select => !select.ready).length === 0){
-				printStats && console.time('update student names');
-				querySequence.noTx(triggers, newStudentNames.map((name, index) =>
-					[ `UPDATE students SET name = $1 WHERE id = ${index + 1}`,
-						[ name ] ])).then(result => {
-						if(printStats) {
-							console.timeEnd('update student names')
-							console.time('student names changed on instances')
-						}
-					});
+			printStats && console.time('update student names');
+			querySequence(newStudentNames.map((name, index) =>
+				[ `UPDATE students SET name = $1 WHERE id = ${index + 1}`,
+					[ name ] ])).then(result => {
+					if(printStats) {
+						console.timeEnd('update student names')
+						console.time('student names changed on instances')
+					}
+				});
 
-				// Only perform this operation once
-				updateStudentNames = function() {};
-			}
+			// Only perform this operation once
+			updateStudentNames = function() {};
 		};
 
 		// Stage 2 : update scores individually
@@ -117,7 +169,7 @@ exports.scoresLoad = function(test) {
 
 			printStats && console.time('score update queries')
 
-			querySequence.noTx(triggers, queries).then(result => {
+			querySequence(queries).then(result => {
 				if(printStats) {
 					console.timeEnd('score update queries')
 					console.time('scores updated on instances')
@@ -125,61 +177,6 @@ exports.scoresLoad = function(test) {
 			});
 		};
 
-		liveSelects.forEach(select => {
-			select.on('update', (diff) => {
-				switch(curStage){
-					case 0:
-						readyCount++;
-						initialData[select.params[0] - 1] = _.values(diff);
-
-						if(readyCount === liveSelects.length){
-							printDebug && console.log('INITIAL UPDATE\n', initialData);
-
-							curStage++;
-							readyCount = 0;
-
-							// May happen before or after ready
-							updateStudentNames();
-						}
-						break;
-					case 1:
-						readyCount++;
-						test.ok(diff.added
-							.map(change =>
-								change.student_name ===
-									newStudentNames[change.student_id - 1])
-							.indexOf(false) === -1, 'Student name update check');
-
-						if(readyCount === liveSelects.length){
-							printStats && console.time('student names changed on instances');
-							curStage++;
-							readyCount = 0;
-
-							updateScores();
-						}
-						break;
-					case 2:
-						diff.added.forEach(change => {
-							if(change.score ===
-									fixtureData.scores[change.score_id - 1].score * 2) {
-								_.pull(updatedScoreIds, change.score_id)
-							}
-						});
-
-						if(updatedScoreIds.length === 0){
-							if(printStats){
-								console.timeEnd('scores updated on instances');
-								clearInterval(memoryInterval);
-								console.log(JSON.stringify(memoryUsageSnapshots));
-							}
-							// Make sure all are stopped
-							liveSelects.forEach(thisSelect => thisSelect.stop());
-							test.done();
-						}
-						break;
-				}
-			});
-		});
 	}, error => console.error(error));
 
 }

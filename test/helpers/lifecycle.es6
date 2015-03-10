@@ -12,7 +12,7 @@ module.exports = {
 
 		setTimeout(function(){
 			if(startCount === testCount){
-				triggers.cleanup().then(process.exit);
+				liveDb.cleanup().then(process.exit);
 			}
 		}, 1000);
 

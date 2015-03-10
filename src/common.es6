@@ -1,4 +1,4 @@
-var extend       = require('extend')
+var _            = require('lodash')
 var pg           = require('pg')
 var randomString = require('random-strings')
 
@@ -234,7 +234,7 @@ module.exports = exports = {
 		});
 
 		diff.copied !== null && diff.copied.forEach(copied => {
-			var copyRow = extend({}, data[copied.orig_index - 1])
+			var copyRow = _.clone(data[copied.orig_index - 1])
 			copyRow._index = copied.new_index
 			newResults[copied.new_index - 1] = copyRow
 		});

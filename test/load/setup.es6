@@ -5,8 +5,10 @@ var babar = require('babar');
 var stats = require('simple-statistics');
 var spawn = require('child_process').spawn;
 
-var querySequence = require('../../src/querySequence');
 var scoresLoadFixture = require('../fixtures/scoresLoad');
+
+// For querySequence compatibility with main test suite
+process.env.CONN = options.conn
 
 const MIN_WAIT = 100;
 
@@ -54,7 +56,7 @@ var clientPromise = new Promise((resolve, reject) => {
 var installPromise = new Promise((resolve, reject) => {
 	clientPromise.then(client => {
 		console.time('Installed inital data');
-		scoresLoadFixture.install(client, fixtureData).then(() => {
+		scoresLoadFixture.install(fixtureData).then(() => {
 			console.timeEnd('Installed inital data');
 			resolve()
 		}, reject)
@@ -87,7 +89,8 @@ var childPromise = new Promise((resolve, reject) => {
 				case 'CLASS_UPDATE':
 					var eventTime = parseInt(data[1], 10);
 					var classId = parseInt(data[2], 10);
-					var scoreIds = data[3].split(',').map(scoreId => parseInt(scoreId, 10));
+					var scoreIds = data[3].split(',').map(scoreDetails => 
+						scoreDetails.split('@').map(num => parseInt(num, 10)))
 					var responseTimes = null;
 
 // 					classUpdates.length > selectCount &&
@@ -95,10 +98,10 @@ var childPromise = new Promise((resolve, reject) => {
 
 					if(waitingOps.length !== 0){
 						var myOps = waitingOps.filter(op =>
-							scoreIds.indexOf(op.scoreId) !== -1);
+							scoreIds.filter(score =>
+								score[0] === op.scoreId && score[1] >= op.score).length !== 0);
 						// Remove myOps from the global wait list
-						waitingOps = waitingOps.filter(op =>
-							scoreIds.indexOf(op.scoreId) === -1);
+						waitingOps = waitingOps.filter(op => myOps.indexOf(op) === -1);
 
 						// Calculate response time
 						responseTimes = myOps.map(op => eventTime - op.time);
@@ -144,10 +147,13 @@ var performRandom = {
 		} while(classId > settings.maxSelects);
 
 		clientPromise.then(client => {
+			scoreRow.score++
+
 			// Record operation time
 			waitingOps.push({
 				scoreId: scoreRow.id,
 				classId,
+				score: scoreRow.score,
 				time: Date.now()
 			});
 // 	 		console.log('UPDATING', scoreRow.id, classId);
@@ -172,6 +178,7 @@ var performRandom = {
 			waitingOps.push({
 				scoreId,
 				classId,
+				score: 5,
 				time: Date.now()
 			});
 // 	 		console.log('INSERTING', scoreId, classId, assignId);
@@ -232,7 +239,8 @@ childPromise.then(() => {
 process.on('SIGINT', () => {
 	clientDone && clientDone();
 
-	var filteredEvents = classUpdates.filter(evt => evt.responseTimes !== null)
+	var filteredEvents = classUpdates.filter(evt =>
+		evt.responseTimes !== null && evt.responseTimes.length !== 0)
 
 	console.log(
 		'Final Data Count \n',
