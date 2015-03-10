@@ -338,7 +338,15 @@ process.on('SIGINT', () => {
 		console.log(babar(respPrep, {
 			caption: 'Responses per Second Elapsed'
 		}))
-		
+
+		var respPrepTable = respPrep.map(evt => evt[1])
+		console.table([ 0.05, 0.25, 0.5, 0.75, 0.95, 1 ].map(percentile => {
+			return {
+				'Percentile': percentile * 100,
+				'Time (ms)': Math.round(stats.quantile(respPrepTable, percentile))
+			}
+		}))
+
 	}
 
 	process.exit()
