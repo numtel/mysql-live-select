@@ -1,5 +1,5 @@
 {
-	"name"        : "pg-live-select",
+	"name"        : "pg-live-query",
 	"version"     : "0.0.1",
 	"description" : "Provide realtime updates on SELECT statements",
 	"main"        : "lib/LiveSQL.js",
