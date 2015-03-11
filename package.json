@@ -4,7 +4,7 @@
 	"description" : "Provide realtime updates on SELECT statements",
 	"main"        : "lib/LiveSQL.js",
 	"author"      : "numtel <ben@latenightsketches.com>",
-	"license"     : "GPLv3",
+	"license"     : "LGPLv2.1",
 	"repository"  : "https://github.com/FocusSchoolSoftware/pg-live-query.git",
 
 	"contributors" : [
