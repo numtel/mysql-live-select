@@ -1,4 +1,4 @@
-# pg-notify-trigger
+# pg-live-query
 
 This package exposes the `PgTriggers` class in order to provide realtime result sets for PostgreSQL `SELECT` statements.
 

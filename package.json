@@ -1,11 +1,11 @@
 {
-	"name"        : "pg-notify-trigger",
+	"name"        : "pg-live-query",
 	"version"     : "0.0.1",
-	"description" : "Trigger notify for specific row change events",
+	"description" : "LiveQuery implementation for Postgres",
 	"main"        : "lib/PgTriggers.js",
 	"author"      : "numtel <ben@latenightsketches.com>",
-	"license"     : "TBD",
-	"repository"  : "https://git.focus-sis.com/beng/pg-notify-trigger.git",
+	"license"     : "GPLv3",
+	"repository"  : "https://github.com/FocusSchoolSoftware/pg-live-query.git",
 
 	"engines": {
 		"node": "0.10"
