@@ -3,11 +3,11 @@
 	"version"     : "0.0.1",
 	"description" : "Provide realtime updates on SELECT statements",
 	"main"        : "lib/LiveSQL.js",
-	"author"      : "numtel <ben@latenightsketches.com>",
 	"license"     : "LGPLv2.1",
 	"repository"  : "https://github.com/FocusSchoolSoftware/pg-live-query.git",
 
 	"contributors" : [
+		"numtel <ben@latenightsketches.com>",
 		"nothingisdead <rbmyr8@gmail.com>"
 	],
 	"engines": {
