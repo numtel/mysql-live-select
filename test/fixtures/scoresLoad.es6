@@ -1,7 +1,7 @@
-var _ = require('lodash');
+var _ = require('lodash')
 
-var randomString  = require('../helpers/randomString');
-var querySequence = require('../../src/querySequence');
+var randomString  = require('random-strings')
+var querySequence = require('../helpers/querySequence')
 
 /**
  * Generate data structure describing a random scores set
@@ -12,30 +12,30 @@ var querySequence = require('../../src/querySequence');
  */
 exports.generate =
 function(classCount, assignPerClass, studentsPerClass, classesPerStudent) {
-	var studentCount = Math.ceil(classCount / classesPerStudent) * studentsPerClass;
-	var assignCount  = classCount * assignPerClass;
-	var scoreCount   = assignCount * studentsPerClass;
+	var studentCount = Math.ceil(classCount / classesPerStudent) * studentsPerClass
+	var assignCount  = classCount * assignPerClass
+	var scoreCount   = assignCount * studentsPerClass
 
 	var students = _.range(studentCount).map(index => {
 		return {
 			id   : index + 1,
-			name : randomString()
+			name : randomString.alphaLower(10)
 		}
-	});
+	})
 
 	var assignments = _.range(assignCount).map(index => {
 		return {
 			id       : index + 1,
 			class_id : (index % classCount) + 1,
-			name     : randomString(),
+			name     : randomString.alphaLower(10),
 			value    : Math.ceil(Math.random() * 100)
 		}
-	});
+	})
 
 	var scores = _.range(scoreCount).map(index => {
-		var assignId = Math.floor(index / studentsPerClass) + 1;
+		var assignId = Math.floor(index / studentsPerClass) + 1
 		var baseStudent =
-			Math.floor((assignments[assignId - 1].class_id - 1) / classesPerStudent);
+			Math.floor((assignments[assignId - 1].class_id - 1) / classesPerStudent)
 
 		return {
 			id            : index + 1,
@@ -44,48 +44,50 @@ function(classCount, assignPerClass, studentsPerClass, classesPerStudent) {
 			                (index % studentsPerClass) + 1,
 			score         : Math.ceil(Math.random() * assignments[assignId - 1].value)
 		}
-	});
+	})
 
-	return { assignments, students, scores };
-};
+	return { assignments, students, scores }
+}
 
 function columnTypeFromName(name) {
 	switch(name){
-		case 'id'   : return 'serial NOT NULL';
-		case 'name' : return 'character varying(50) NOT NULL';
-		default     : return 'integer NOT NULL';
+		case 'id'   : return 'serial NOT NULL'
+		case 'name' : return 'character varying(50) NOT NULL'
+		default     : return 'integer NOT NULL'
 	}
 }
 
 /**
  * Create/replace test tables filled with fixture data
- * @param  Object   generatation Output from generate() function above
+ * @param  Object   generatation     Output from generate() function above
  * @return Promise
  */
-exports.install = function(triggersInstance, generation) {
+exports.install = function(generation) {
 	return Promise.all(_.map(generation, (rows, table) => {
-		var valueCount = 0;
-
-		// Reset PgTriggers trigger cache so that triggers are recreated if needed
-		delete triggersInstance.triggerTables[table];
 
 		// Create tables, Insert data
-		return querySequence(triggersInstance, [
+		var installQueries = [
 			`DROP TABLE IF EXISTS ${table} CASCADE`,
 
 			`CREATE TABLE ${table} (
 				${_.keys(rows[0])
 					.map(column => `${column} ${columnTypeFromName(column)}`).join(', ')},
 				CONSTRAINT ${table}_pkey PRIMARY KEY (id)
-			) WITH ( OIDS=FALSE )`,
+			) WITH ( OIDS=FALSE )`
+		]
 
-			[`INSERT INTO ${table}
-					(${_.keys(rows[0]).join(', ')})
-				 VALUES	${rows.map(row =>
+		// Insert max 500 rows per query
+		installQueries = installQueries.concat(_.chunk(rows, 500).map(rowShard => {
+			var valueCount = 0
+			return [`INSERT INTO ${table}
+					(${_.keys(rowShard[0]).join(', ')})
+				 VALUES	${rowShard.map(row =>
 					`(${_.map(row, () => '$' + ++valueCount).join(', ')})`).join(', ')}`,
-			 _.flatten(rows.map(row => _.values(row))) ]
-		]);
-	}));
+			 _.flatten(rowShard.map(row => _.values(row))) ]
+		}))
+
+		return querySequence(installQueries)
+	}))
 
 }
 

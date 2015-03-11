@@ -1,12 +1,12 @@
 # pg-live-query
 
-This package exposes the `PgTriggers` class in order to provide realtime result sets for PostgreSQL `SELECT` statements.
+This package exposes the `LiveSQL` class in order to provide realtime result sets for PostgreSQL `SELECT` statements.
 
 ## Implements
 
-### PgTriggers Class
+### LiveSQL Class
 
-The `PgTriggers` constructor requires 2 arguments:
+The `LiveSQL` constructor requires 2 arguments:
 
 Constructor Argument | Type | Description
 ---------|------|---------------------------
@@ -17,38 +17,10 @@ A single persistent client is used to listen for notifications. Result set refre
 
 Each instance offers the following methods:
 
-Method Name | Returns | Description
--------------|--------|---------------------
-`select(query, params)` | `LiveSelect` instance | Instantiate a live updating `SELECT` statement for a given query. Pass query string as first argument, `query`. Optionally, pass an array to the second arguments, `params`, with values for placeholders (e.g. `$1`).
-`cleanup(callback)` | `Promise` | Perform pre-shutdown cleanup of triggers, functions and any other temporary data. Optional argument `callback` requires function which accepts `error, result` arguments.
-`getClient(callback)` | *None* | Obtain a Postgres client from the pool. Required callback accepts `error`, `client`, and `done` arguments. From the [node-postgres wiki](https://github.com/brianc/node-postgres/wiki/pg): *If you do not call `done()` the client will never be returned to the pool and you will leak clients. This is mega-bad so always call `done()`.*
-
-The following events are emitted:
-
-Event Name | Arguments | Description
----------|------|---------------------------
-`change:<table_name>` | *None*  | A change notification has arrived for the specific table
-`error` | `error` | Unhandled exceptions will be thrown
-
-`PgTriggers` instances allow an unlimited number of event listeners.
-
-### LiveSelect Class
-
-Instantiate a `LiveSelect` using the `PgTriggers.select()` method. Each instance offers the following methods:
-
-Method Name | Description
------------|-----------------------------
-`refresh()` | Update the result set immediately.
-`throttledRefresh()` | Same as `refresh` method except will not perform operations more frequently than 1 per second.
-`stop()` | Stop receiving updates on this instance.
-
-And emits the following events:
-
-Event Name | Arguments | Description
----------|------|---------------------------
-`update` | `diff` | Array containing description of changes
-`ready` | *None* | All triggers have been installed, initial results to follow
-`error` | `error` | Unhandled exceptions will be thrown
+Method | Returns | Description
+-------|---------|-----------------
+`async select(query, params, onUpdate)` | `{ stop() }` handle `Object` | Call `onUpdate` with new data on initialization and each change. `query` only accepts string. Optional `params` argument accepts array.
+`async cleanup()` | *Undefined* | Drop all table triggers and close all connections.
 
 ## Simple Example
 

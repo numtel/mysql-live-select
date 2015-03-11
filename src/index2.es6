@@ -1,11 +1,12 @@
-var PgTriggers = require('./PgTriggers');
+var util = require('util')
+var LiveSQL = require('./LiveSQL')
 
-const CONN_STR = 'postgres://meteor:meteor@127.0.0.1/meteor';
-const CHANNEL = 'ben_test';
+const CONN_STR = 'postgres://meteor:meteor@127.0.0.1/meteor'
+const CHANNEL = 'ben_test'
 
-var triggers = new PgTriggers(CONN_STR, CHANNEL);
+var liveDb = new LiveSQL(CONN_STR, CHANNEL)
 
-var mySelect = triggers.select(`
+liveDb.select(`
 	SELECT
 		students.name  AS student_name,
 		students.id    AS student_id,
@@ -22,14 +23,14 @@ var mySelect = triggers.select(`
 		(students.id = scores.student_id)
 	WHERE
 		assignments.class_id = $1
-`, [ 1 ]);
+	ORDER BY
+		score DESC
+`, [ 1 ], (diff, rows) => {
+	console.log(util.inspect(diff, { depth: null }), rows)
+})
 
-mySelect.on('update', diff => {
-	console.log(diff);
-});
+// Ctrl+C
+process.on('SIGINT', () => {
+	liveDb.cleanup().then(process.exit)
+})
 
-
-process.on('SIGINT', function() {
-	// Ctrl+C
-	triggers.cleanup().then(process.exit)
-});
