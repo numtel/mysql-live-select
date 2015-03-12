@@ -5,7 +5,7 @@ module.exports = {
 		studentsPerClass: 1,
 		classesPerStudent: 6
 	},
-	customRunner: 'common.getClient',
-	clientCount: 50
+	customRunner: 'common.applyDiff',
+	sampleFixture: 'sampleRows.20'
 }
 

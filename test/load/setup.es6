@@ -10,8 +10,6 @@ var scoresLoadFixture = require('../fixtures/scoresLoad')
 // For querySequence compatibility with main test suite
 process.env.CONN = options.conn
 
-const MIN_WAIT = 100
-
 var memoryUsage  = []
 var classUpdates = []
 var waitingOps   = []
@@ -62,19 +60,19 @@ var installPromise = new Promise((resolve, reject) => {
 // Spawn child process
 var childPromise = new Promise((resolve, reject) => {
 	installPromise.then(() => {
-		// Unit tests do not instantiate LiveSelect instances
-		if(settings.customRunner) {
-			resolve()
-		}else{
-			console.time('Initialized each select instance')
-		}
-
 		var child = spawn('node', [
 			'--debug',
 			'test/load/runner/',
 			JSON.stringify(options),
 			JSON.stringify(settings)
 		])
+
+		// Unit tests do not instantiate LiveSelect instances
+		if(settings.customRunner) {
+			resolve(child)
+		}else{
+			console.time('Initialized each select instance')
+		}
 
 		child.stdout.on('data', data => {
 			data = data.toString().split(' ')
@@ -121,7 +119,7 @@ var childPromise = new Promise((resolve, reject) => {
 						// childPromise is ready when all selects have initial data
 						console.timeEnd('Initialized each select instance')
 						// Wait for LiveSQL interval to come around, just in case...
-						setTimeout(resolve, 200)
+						setTimeout(() => resolve(child), 200)
 					}
 					break
 				default:

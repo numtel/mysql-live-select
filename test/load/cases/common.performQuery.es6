@@ -6,6 +6,7 @@ module.exports = {
 		classesPerStudent: 6
 	},
 	customRunner: 'common.performQuery',
-	clientCount: 50
+	clientCount: 50,
+	query: `SELECT 1+1`
 }
 

@@ -237,12 +237,14 @@ module.exports = exports = {
 			var copyRow = _.clone(data[copied.orig_index - 1])
 			copyRow._index = copied.new_index
 			newResults[copied.new_index - 1] = copyRow
+			copyRow = null
 		});
 
 		diff.moved !== null && diff.moved.forEach(moved => {
 			var movingRow = data[moved.old_index - 1]
 			movingRow._index = moved.new_index
 			newResults[moved.new_index - 1] = movingRow
+			movingRow = null
 		});
 
 		diff.added !== null && diff.added

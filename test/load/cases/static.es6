@@ -12,8 +12,6 @@ module.exports = {
 	opPerSecond: {
 		insert: 90,
 		update: 90,
-		// TODO deletes not described in diff.added so not used
-		delete: 5
 	}
 }
 

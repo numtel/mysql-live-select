@@ -2,25 +2,14 @@ var _ = require('lodash')
 
 var common = require('../../../src/common')
 
-// Milliseconds to wait between closing one connection and opening another
-const SLEEP_DURATION = 10
-
-function openAndClose() {
-	return new Promise((resolve, reject) => {
-		common.getClient(options.conn).then(handle => {
-			handle.done()
-			resolve()
-		}, reject)
-	})
+module.exports = async function() {
+	var handle = await common.getClient(options.conn)
+	await delay(1)
+	handle.done()
+	handle = null
 }
 
-function openAndCloseForever() {
-	openAndClose().then(() => {
-		setTimeout(() => {
-			process.stdout.write(['NEXT_EVENT', Date.now()].join(' '))
-			openAndCloseForever()
-		}, SLEEP_DURATION)
-	}, reason => console.error('getClient Failed', reason))
+function delay(duration) {
+	return new Promise(resolve => setTimeout(resolve, duration))
 }
 
-_.range(settings.clientCount).map(openAndCloseForever)
