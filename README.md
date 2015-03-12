@@ -34,35 +34,7 @@ Method | Returns | Description
 
 ## Perfoming Tests
 
-### Regression Suite
-
-1. Configure connection string in `package.json`.
-
-2. Run the suite with `npm run make && npm test`.
-
-### Performance / Memory Usage
-
-The load test application may be ran using `node test/load/`.
-
-Check your configuration options using `node test/load/ --help`.
-
-The default case performs a general end-to-end test on the entire package.
-
-Other cases are available: (Use the `--case=<case name>` command line option)
-
-Case name | Description
-----------|----------------
-`static` | Default case, perform steady load of `INSERT` and `UPDATE` operations
-`spikes` | Perform spiking loads operations
-`baseline` | No operation, control case
-`common.getClient` | Obtain and release client from connection pool
-`common.tableTriggers` | Create and drop triggers/functions on a table
-`common.performQuery` | Obtain client, perform simple query (1+1) then release client
-`common.performQuery.scoresLoad` | Perform query that matches the `static` case
-`common.performQuery.scoresLoadDiff` | Perform query to get difference on `static` case
-`common.getResultSetDiff` | Get difference of current result set from last known
-`common.applyDiff.20` | Apply random differences to a small result set (20 rows)
-`common.applyDiff.800` | Apply random differences to a large result set (800 rows)
+Please see the [Performing Tests wiki page](https://github.com/FocusSchoolSoftware/pg-live-query/wiki/Performing-Tests).
 
 ## License
 
