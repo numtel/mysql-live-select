@@ -1,6 +1,6 @@
-// 50 op/sec for first second, then cycle up to 51 op/sec
+// 5 op/sec for first second, then cycle up to 45 op/sec
 var spikeOperations = elapsed =>
-	elapsed < 1 ? 50 : (Math.sin(elapsed) * 50) + 1;
+	elapsed < 1 ? 5 : ((Math.sin(elapsed / 10) + 1) * 20) + 5
 
 module.exports = {
 	init: {
