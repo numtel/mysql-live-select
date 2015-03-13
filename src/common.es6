@@ -68,11 +68,38 @@ module.exports = exports = {
 	async createTableTrigger(client, table, channel) {
 		var triggerName = `${channel}_${table}`
 
+		var payloadTpl = `
+			SELECT
+				'${table}'  AS table,
+				TG_OP       AS op,
+				json_agg($ROW$) AS data
+			INTO row_data;
+		`
+		var payloadNew = payloadTpl.replace(/\$ROW\$/g, 'NEW')
+		var payloadOld = payloadTpl.replace(/\$ROW\$/g, 'OLD')
+		var payloadChanged = `
+			SELECT
+				'${table}'  AS table,
+				TG_OP       AS op,
+				json_agg(NEW) AS new_data,
+				json_agg(OLD) AS old_data
+			INTO row_data;
+		`
+
 		await exports.performQuery(client,
 			`CREATE OR REPLACE FUNCTION ${triggerName}() RETURNS trigger AS $$
-				BEGIN
-					NOTIFY "${channel}", '${table}';
-					RETURN NULL;
+				DECLARE
+          row_data RECORD;
+        BEGIN
+          IF (TG_OP = 'INSERT') THEN
+            ${payloadNew}
+          ELSIF (TG_OP  = 'DELETE') THEN
+            ${payloadOld}
+          ELSIF (TG_OP = 'UPDATE') THEN
+            ${payloadChanged}
+          END IF;
+          PERFORM pg_notify('${channel}', row_to_json(row_data)::TEXT);
+          RETURN NULL;
 				END;
 			$$ LANGUAGE plpgsql`)
 
@@ -83,7 +110,7 @@ module.exports = exports = {
 		await exports.performQuery(client,
 			`CREATE TRIGGER "${triggerName}"
 				AFTER INSERT OR UPDATE OR DELETE ON "${table}"
-				EXECUTE PROCEDURE ${triggerName}()`)
+				FOR EACH ROW EXECUTE PROCEDURE ${triggerName}()`)
 
 		return true
 	},

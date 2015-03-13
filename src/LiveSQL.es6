@@ -17,6 +17,8 @@ class LiveSQL extends EventEmitter {
 		this.selectBuffer    = {}
 		this.tablesUsed      = {}
 		this.queryTablesUsed = {}
+		// DEBUG HELPER
+		this.refreshCount    = 0
 
 		this.ready = this.init()
 	}
@@ -28,15 +30,39 @@ class LiveSQL extends EventEmitter {
 			`LISTEN "${this.channel}"`)
 
 		this.notifyHandle.client.on('notification', info => {
-			if(info.channel === this.channel && info.payload in this.tablesUsed){
-				this.waitingToUpdate =
-					_.union(this.waitingToUpdate, this.tablesUsed[info.payload])
+			if(info.channel === this.channel) {
+				try {
+					var payload = JSON.parse(info.payload)
+				} catch(error) {
+					return this.emit('error',
+						new Error('INVALID_NOTIFICATION ' + info.payload))
+				}
+
+				if(payload.table in this.tablesUsed) {
+					for(let queryHash of this.tablesUsed[payload.table]) {
+						let queryBuffer = this.selectBuffer[queryHash]
+						if((queryBuffer.triggers
+								// Check for true response from manual trigger
+								&& payload.table in queryBuffer.triggers
+								&& (payload.op === 'UPDATE'
+									? queryBuffer.triggers[payload.table](payload.new_data[0])
+										|| queryBuffer.triggers[payload.table](payload.old_data[0])
+									: queryBuffer.triggers[payload.table](payload.data[0])))
+							|| (queryBuffer.triggers
+								// No manual trigger for this table
+								&& !(payload.table in  queryBuffer.triggers))
+							|| !queryBuffer.triggers) {
+							this.waitingToUpdate.push(queryHash)
+						}
+					}
+				}
 			}
 		})
 
 		this.updateInterval = setInterval(() => {
 			let queriesToUpdate =
 				_.uniq(this.waitingToUpdate.splice(0, this.waitingToUpdate.length))
+			this.refreshCount += queriesToUpdate.length
 
 			for(let queryHash of queriesToUpdate) {
 				this._updateQuery(queryHash)
@@ -44,9 +70,10 @@ class LiveSQL extends EventEmitter {
 		}.bind(this), THROTTLE_INTERVAL)
 	}
 
-	async select(query, params, onUpdate) {
+	async select(query, params, onUpdate, triggers) {
 		// Allow omission of params argument
 		if(typeof params === 'function' && typeof onUpdate === 'undefined') {
+			triggers = onUpdate
 			onUpdate = params
 			params = []
 		}
@@ -77,6 +104,7 @@ class LiveSQL extends EventEmitter {
 			this.selectBuffer[queryHash] = {
 				query,
 				params,
+				triggers,
 				data     : [],
 				handlers : [ onUpdate ]
 			}

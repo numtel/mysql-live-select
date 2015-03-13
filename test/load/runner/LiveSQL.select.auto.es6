@@ -11,11 +11,8 @@ var selectCount =
 	settings.maxSelects && settings.maxSelects < settings.init.classCount ?
 		settings.maxSelects : settings.init.classCount
 
-var instanceMultiplier =
-	settings.instanceMultiplier ? settings.instanceMultiplier : 1
-
-module.exports = _.flatten(_.range(instanceMultiplier).map(instance =>
-	_.range(selectCount).map(index => {
+module.exports = _.flatten(_.range(settings.instanceMultiplier || 1)
+	.map(instance => _.range(selectCount).map(index => {
 
 	var select = liveDb.select(`
 		SELECT
@@ -41,7 +38,13 @@ module.exports = _.flatten(_.range(instanceMultiplier).map(instance =>
 		if(diff.added) {
 			scoreIds = diff.added.map(row => row.score_id + '@' + row.score).join(',')
 		}
-		process.stdout.write(['CLASS_UPDATE', Date.now(), index + 1, scoreIds].join(' '))
+		process.stdout.write([
+			'CLASS_UPDATE',
+			Date.now(),
+			index + 1,
+			liveDb.refreshCount,
+			scoreIds
+		].join(' '))
 	})
 
 	return select

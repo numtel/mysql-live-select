@@ -4,8 +4,7 @@ var _ = require('lodash')
 global.options  = JSON.parse(process.argv[2])
 global.settings = JSON.parse(process.argv[3])
 
-var runner = require(
-	settings.customRunner ? './' + settings.customRunner : './LiveSQL.select')
+var runner = require('./' + settings.customRunner)
 
 if(typeof runner === 'function') {
 	// Unit tests will export an async function that can be run over and over

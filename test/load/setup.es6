@@ -68,7 +68,7 @@ var childPromise = new Promise((resolve, reject) => {
 		])
 
 		// Unit tests do not instantiate LiveSelect instances
-		if(settings.customRunner) {
+		if(!('maxSelects' in settings)) {
 			resolve(child)
 		}else{
 			console.time('Initialized each select instance')
@@ -92,7 +92,8 @@ var childPromise = new Promise((resolve, reject) => {
 					// Default "end-to-end" load test mode will log score updates
 					var eventTime = parseInt(data[1], 10)
 					var classId = parseInt(data[2], 10)
-					var scoreIds = data[3].split(',').map(scoreDetails => 
+					var refreshCount = parseInt(data[3], 10)
+					var scoreIds = data[4].split(',').map(scoreDetails => 
 						scoreDetails.split('@').map(num => parseInt(num, 10)))
 					var responseTimes = null
 
@@ -112,6 +113,7 @@ var childPromise = new Promise((resolve, reject) => {
 
 					classUpdates.push({
 						time: eventTime,
+						refreshCount,
 						responseTimes
 					})
 
@@ -252,9 +254,12 @@ process.on('SIGINT', () => {
 		'Scores: ', fixtureData.scores.length
 	)
 
+	var responseCount = filteredEvents.reduce(
+		(count, evt) => count + evt.responseTimes.length, 0)
+
 	if(settings.opPerSecond) {
 		console.log(
-			'Responses Received: ', filteredEvents.length, '\n',
+			'Responses Received: ', responseCount, '\n',
 			'Still Waiting for Response: ', waitingOps.length, '\n'
 		)
 	}
@@ -345,6 +350,15 @@ process.on('SIGINT', () => {
 			}
 		}))
 
+		// Print refreshes count over elapsed time graph
+		var refreshPrep = filteredEvents.map(evt => [
+			(evt.time - firstMemTime) / 1000,
+			evt.refreshCount
+		])
+
+		console.log(babar(refreshPrep, {
+			caption: 'Refresh Count over Elapsed Time'
+		}))
 	}
 
 	if(waitingOps.length !== 0) {
