@@ -347,6 +347,17 @@ process.on('SIGINT', () => {
 
 	}
 
+	if(waitingOps.length !== 0) {
+		var waitingPrepTable = waitingOps.map(op => Date.now() - op.time)
+		console.log('Waiting Operations Wait Times')
+		console.table([ 0.05, 0.25, 0.5, 0.75, 0.95, 1 ].map(percentile => {
+			return {
+				'Percentile': percentile * 100,
+				'Time (ms)': Math.round(stats.quantile(waitingPrepTable, percentile))
+			}
+		}))
+	}
+
 	process.exit()
 })
 
