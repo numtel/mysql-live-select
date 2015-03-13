@@ -5,7 +5,7 @@ var murmurHash   = require('murmurhash-js').murmur3
 var common     = require('./common')
 
 // Number of milliseconds between refreshes
-const THROTTLE_INTERVAL = 100
+const THROTTLE_INTERVAL = 500
 
 class LiveSQL extends EventEmitter {
 	constructor(connStr, channel) {
@@ -16,6 +16,7 @@ class LiveSQL extends EventEmitter {
 		this.waitingToUpdate = []
 		this.selectBuffer    = {}
 		this.tablesUsed      = {}
+		this.queryTablesUsed = {}
 
 		this.ready = this.init()
 	}
@@ -81,7 +82,14 @@ class LiveSQL extends EventEmitter {
 			}
 
 			let pgHandle = await common.getClient(this.connStr)
-			let queryTables = await common.getQueryTables(pgHandle.client, query)
+			let queryTables
+			if(query in this.queryTablesUsed) {
+				queryTables = this.queryTablesUsed[query]
+			}
+			else {
+				queryTables = await common.getQueryTables(pgHandle.client, query)
+				this.queryTablesUsed[query] = queryTables
+			}
 
 			for(let table of queryTables) {
 				if(!(table in this.tablesUsed)) {
