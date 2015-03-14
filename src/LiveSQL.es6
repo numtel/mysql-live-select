@@ -130,8 +130,6 @@ class LiveSQL extends EventEmitter {
 			}
 
 			pgHandle.done()
-			pgHandle = null
-			queryDetails = null
 
 			this.waitingToUpdate.push(queryHash)
 		}
@@ -153,8 +151,6 @@ class LiveSQL extends EventEmitter {
 				}
 			}
 
-			stop = null
-			queryHash = null
 		}.bind(this)
 
 		return { stop }
@@ -171,7 +167,6 @@ class LiveSQL extends EventEmitter {
 			queryBuffer.params)
 
 		pgHandle.done()
-		pgHandle = null
 
 		if(diff !== null) {
 			queryBuffer.data = common.applyDiff(queryBuffer.data, diff)
@@ -185,10 +180,8 @@ class LiveSQL extends EventEmitter {
 
 	async cleanup() {
 		this.notifyHandle.done()
-		this.notifyHandle = null
 
 		clearInterval(this.updateInterval)
-		this.updateInterval = null
 
 		let pgHandle = await common.getClient(this.connStr)
 
@@ -197,7 +190,6 @@ class LiveSQL extends EventEmitter {
 		}
 
 		pgHandle.done()
-		pgHandle = null
 	}
 }
 
@@ -206,13 +198,12 @@ module.exports = LiveSQL
 function filterHashProperties(diff) {
 	if(diff instanceof Array) {
 		return diff.map(event => {
-			return _.omit(event, '_hash');
-		});
-	}
-	else{
-		_.forOwn(diff, (rows, key) => {
-			diff[key] = filterHashProperties(rows)
+			return _.omit(event, '_hash')
 		})
 	}
-	return diff;
+	// Otherwise, diff is object with arrays for keys
+	_.forOwn(diff, (rows, key) => {
+		diff[key] = filterHashProperties(rows)
+	})
+	return diff
 }
