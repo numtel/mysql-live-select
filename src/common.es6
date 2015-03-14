@@ -36,12 +36,12 @@ module.exports = exports = {
 	},
 
 	/**
-	 * Query information_schema to determine tables used by query
+	 * Query information_schema to determine tables used and if updatable
 	 * @param  Object client node-postgres client
 	 * @param  String query  SQL statement, params not used
 	 * @return Promise Array Table names
 	 */
-	async getQueryTables(client, query) {
+	async getQueryDetails(client, query) {
 		var nullifiedQuery = query.replace(/\$\d+/g, 'NULL')
 		var viewName = `tmp_view_${randomString.alphaLower(10)}`
 
@@ -53,9 +53,17 @@ module.exports = exports = {
 				FROM information_schema.view_column_usage vc
 				WHERE view_name = $1`, [ viewName ])
 
+		var isUpdatableResult = await exports.performQuery(client,
+			`SELECT is_updatable
+				FROM information_schema.views
+				WHERE table_name = $1`, [ viewName ])
+
 		await exports.performQuery(client, `DROP VIEW ${viewName}`)
 
-		return tablesResult.rows.map(row => row.table_name)
+		return {
+			isUpdatable: isUpdatableResult.rows[0].is_updatable === 'YES',
+			tablesUsed: tablesResult.rows.map(row => row.table_name)
+		}
 	},
 
 	/**

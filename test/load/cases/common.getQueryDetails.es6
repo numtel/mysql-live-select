@@ -5,7 +5,7 @@ module.exports = {
 		studentsPerClass: 1,
 		classesPerStudent: 6
 	},
-	customRunner: 'common.getQueryTables',
+	customRunner: 'common.getQueryDetails',
 	clientCount: 50,
 	query: `
 		SELECT
@@ -26,6 +26,7 @@ module.exports = {
 			assignments.class_id = $1
 		ORDER BY
 			score_id ASC`,
-	expected: [ 'scores', 'assignments', 'students' ]
+	expectUpdatable: false,
+	expectedTables: [ 'scores', 'assignments', 'students' ]
 }
 

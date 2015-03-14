@@ -16,7 +16,7 @@ class LiveSQL extends EventEmitter {
 		this.waitingToUpdate = []
 		this.selectBuffer    = {}
 		this.tablesUsed      = {}
-		this.queryTablesUsed = {}
+		this.queryDetailsCache = {}
 		// DEBUG HELPER
 		this.refreshCount    = 0
 
@@ -110,16 +110,16 @@ class LiveSQL extends EventEmitter {
 			}
 
 			let pgHandle = await common.getClient(this.connStr)
-			let queryTables
-			if(query in this.queryTablesUsed) {
-				queryTables = this.queryTablesUsed[query]
+			let queryDetails
+			if(query in this.queryDetailsCache) {
+				queryDetails = this.queryDetailsCache[query]
 			}
 			else {
-				queryTables = await common.getQueryTables(pgHandle.client, query)
-				this.queryTablesUsed[query] = queryTables
+				queryDetails = await common.getQueryDetails(pgHandle.client, query)
+				this.queryDetailsCache[query] = queryDetails
 			}
 
-			for(let table of queryTables) {
+			for(let table of queryDetails.tablesUsed) {
 				if(!(table in this.tablesUsed)) {
 					this.tablesUsed[table] = [ queryHash ]
 					await common.createTableTrigger(pgHandle.client, table, this.channel)
@@ -131,7 +131,7 @@ class LiveSQL extends EventEmitter {
 
 			pgHandle.done()
 			pgHandle = null
-			queryTables = null
+			queryDetails = null
 
 			this.waitingToUpdate.push(queryHash)
 		}
@@ -191,7 +191,7 @@ class LiveSQL extends EventEmitter {
 		this.updateInterval = null
 
 		let pgHandle = await common.getClient(this.connStr)
-		
+
 		for(let table of Object.keys(this.tablesUsed)) {
 			await common.dropTableTrigger(pgHandle.client, table, this.channel)
 		}
@@ -208,7 +208,8 @@ function filterHashProperties(diff) {
 		return diff.map(event => {
 			return _.omit(event, '_hash');
 		});
-	}else{
+	}
+	else{
 		_.forOwn(diff, (rows, key) => {
 			diff[key] = filterHashProperties(rows)
 		})
