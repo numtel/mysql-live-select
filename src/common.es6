@@ -143,6 +143,43 @@ module.exports = exports = {
 	},
 
 	/**
+	 * Using supplied NOTIFY payloads, check which rows match query
+	 * @param  Object  client        node-postgres client
+	 * @param  Array   notifications Payloads from NOTIFY
+	 * @param  String  query         SQL SELECT statement
+	 * @param  Array   params        Optionally, pass an array of parameters
+	 * @return Promise Object        Enumeration of differences
+	 */
+	async getDiffFromSupplied(client, notifications, query, params) {
+		var allRows = flattenNotifications(notifications)
+
+		// ...
+	},
+
+	flattenNotifications(notifications) {
+		var out = []
+		var pushItem = (payload, key) => {
+			let data = _.clone(payload[key])
+			data._op = payload.op
+			data._key = key
+			data._index = payload.index
+			out.push(data)
+		}
+
+		notifications.forEach((payload, index) => {
+			if(payload.op === 'UPDATE') {
+				pushItem(payload, 'new_data')
+				pushItem(payload, 'old_data')
+			}
+			else {
+				pushItem(payload, 'data')
+			}
+		})
+
+		return out
+	}
+
+	/**
 	 * Perform SELECT query, obtaining difference in result set
 	 * @param  Object  client      node-postgres client
 	 * @param  Array   currentData Last known result set for this query/params
