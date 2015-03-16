@@ -1,6 +1,6 @@
 {
 	"name"        : "pg-live-query",
-	"version"     : "0.0.1",
+	"version"     : "0.0.2",
 	"description" : "LiveQuery implementation for PostgreSQL",
 	"main"        : "lib/LiveSQL.js",
 	"license"     : "LGPLv2.1",
