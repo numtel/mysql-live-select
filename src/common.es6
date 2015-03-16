@@ -146,11 +146,10 @@ module.exports = exports = {
 	 * Using supplied NOTIFY payloads, check which rows match query
 	 * @param  Object  client        node-postgres client
 	 * @param  Array   notifications Payloads from NOTIFY
-	 * @param  String  query         SQL SELECT statement
-	 * @param  Array   params        Optionally, pass an array of parameters
+	 * @param  String  parsed        Parsed SQL SELECT statement
 	 * @return Promise Object        Enumeration of differences
 	 */
-	async getDiffFromSupplied(client, notifications, query, params) {
+	async getDiffFromSupplied(client, notifications, parsed) {
 		var allRows = flattenNotifications(notifications)
 
 		// ...
@@ -177,6 +176,25 @@ module.exports = exports = {
 		})
 
 		return out
+	}
+
+	interpolate(query, params) {
+		if(!params || !params.length) return query
+
+		return query.replace(/\$(\d+)/g, (match, index) => {
+			var param = params[index - 1]
+
+			if(_.isString(param)) {
+				// TODO: Need to escape quotes here better!
+				return `'${param.replace(/'/g, "\\'")}'`
+			}
+			else if(param instanceof Date) {
+				return `'${param.toISOString()}'`
+			}
+			else {
+				return param
+			}
+		})
 	}
 
 	/**

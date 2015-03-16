@@ -1,6 +1,7 @@
 var EventEmitter = require('events').EventEmitter
 var _            = require('lodash')
 var murmurHash   = require('murmurhash-js').murmur3
+var sqlParser    = require('sql-parser')
 
 var common     = require('./common')
 
@@ -53,7 +54,7 @@ class LiveSQL extends EventEmitter {
 								&& !(payload.table in  queryBuffer.triggers))
 							|| !queryBuffer.triggers) {
 
-							if(queryBuffer.isSimple) {
+							if(queryBuffer.parsed !== null) {
 								queryBuffer.notifications.push(payload)
 							}
 
@@ -110,7 +111,9 @@ class LiveSQL extends EventEmitter {
 				triggers,
 				data          : [],
 				handlers      : [ onUpdate ],
-				isSimple      : null,
+				// Queries that have parsed property are simple and may be updated
+				//  without re-running the query
+				parsed        : null,
 				notifications : []
 			}
 
@@ -124,7 +127,14 @@ class LiveSQL extends EventEmitter {
 				this.queryDetailsCache[query] = queryDetails
 			}
 
-			this.isSimple = queryDetails.isUpdatable
+			if(queryDetails.isUpdatable) {
+				try {
+					this.selectBuffer[queryHash].parsed = sqlParser.parse(
+						common.interpolate(query, params))
+				} catch(error) {
+					// Not a serious error, fallback to using full refreshing
+				}
+			}
 
 			for(let table of queryDetails.tablesUsed) {
 				if(!(table in this.tablesUsed)) {
@@ -138,6 +148,7 @@ class LiveSQL extends EventEmitter {
 
 			pgHandle.done()
 
+			// Retrieve initial results
 			this.waitingToUpdate.push(queryHash)
 		}
 
@@ -169,12 +180,11 @@ class LiveSQL extends EventEmitter {
 		let queryBuffer = this.selectBuffer[queryHash]
 		let diff
 		// XXX: simple queries disabled!
-		if(1===2 && queryBuffer.isSimple === true) {
+		if(1===2 && queryBuffer.parsed !== null) {
 			diff = await common.getDiffFromSupplied(
 				pgHandle.client,
 				queryBuffer.notifications.splice(0, queryBuffer.notifications.length),
-				queryBuffer.query,
-				queryBuffer.params
+				queryBuffer.parsed
 			)
 		}
 		else{
