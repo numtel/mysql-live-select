@@ -81,7 +81,7 @@ class LiveSQL extends EventEmitter {
 		if(typeof query !== 'string')
 			throw new Error('QUERY_STRING_MISSING')
 		if(!(params instanceof Array))
-			throw new ERROR('PARAMS_ARRAY_MISMATCH')
+			throw new Error('PARAMS_ARRAY_MISMATCH')
 		if(typeof onUpdate !== 'function')
 			throw new Error('UPDATE_FUNCTION_MISSING')
 
