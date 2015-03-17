@@ -209,8 +209,9 @@ childPromise.then(() => {
 	var runTimeSeconds = 0
 	setInterval(() => {
 		runTimeSeconds++
-		if(runTimeSeconds % 15 === 0){
-			console.log(runTimeSeconds)
+		if(runTimeSeconds % 5 === 0){
+			process.stdout.write(
+				`\rApproximately ${runTimeSeconds} seconds elapsed...`)
 		}
 	}, 1000)
 
