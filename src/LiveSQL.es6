@@ -129,8 +129,7 @@ class LiveSQL extends EventEmitter {
 
 			if(queryDetails.isUpdatable) {
 				try {
-					this.selectBuffer[queryHash].parsed = sqlParser.parse(
-						common.interpolate(query, params))
+					this.selectBuffer[queryHash].parsed = sqlParser.parse(query)
 				} catch(error) {
 					// Not a serious error, fallback to using full refreshing
 				}
@@ -184,7 +183,8 @@ class LiveSQL extends EventEmitter {
 			diff = await common.getDiffFromSupplied(
 				pgHandle.client,
 				queryBuffer.notifications.splice(0, queryBuffer.notifications.length),
-				queryBuffer.parsed
+				queryBuffer.parsed,
+				queryBuffer.params
 			)
 		}
 		else{

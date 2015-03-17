@@ -32,7 +32,8 @@ else{
 	// Load full test suite
 	module.exports = _.assign(
 		require('./helpers/lifecycle'),
-		require('./scoresLoad'), // Optional CLASS_COUNT env variable, default 1
-		require('./variousQueries')
+// 		require('./scoresLoad'), // Optional CLASS_COUNT env variable, default 1
+// 		require('./variousQueries'),
+		require('./matchRowsToParsedQuery')
 	)
 }
