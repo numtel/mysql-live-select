@@ -523,3 +523,19 @@ exports.cases.sortMoved = {
 	]
 }
 
+exports.cases.stopped = {
+	query: `SELECT score FROM scores ORDER BY score DESC`,
+	events: [
+		{ data: [
+			{ score: 54, _index: 1 },
+			{ score: 52, _index: 2 },
+			{ score: 28, _index: 3 }
+		] },
+		{ stop: true },
+		{ perform: [
+			`UPDATE scores SET score = 200 WHERE id = 3`
+		] },
+		{ unchanged: UNCHANGED_WAIT },
+	]
+}
+

@@ -51,6 +51,12 @@ exports.variousQueries = function(test) {
 										processEvents(callback, index + 1)
 									}, reject)
 									break
+								case 'stop':
+									select.then(handle => {
+										handle.stop().then(() => {
+											processEvents(callback, index + 1)
+										})
+									})
 								case 'diff':
 								case 'data':
 									if(updateLog.length === nextLogPos) {
