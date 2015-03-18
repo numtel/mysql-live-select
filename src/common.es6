@@ -2,6 +2,8 @@ var _            = require('lodash')
 var pg           = require('pg')
 var randomString = require('random-strings')
 
+var matchRows = require('./matchRowsToParsedQuery')
+
 module.exports = exports = {
 
 	/**
@@ -144,39 +146,54 @@ module.exports = exports = {
 
 	/**
 	 * Using supplied NOTIFY payloads, check which rows match query
-	 * @param  Object  client        node-postgres client
+	 * @param  Array   currentData   Last known result set for this query/params
 	 * @param  Array   notifications Payloads from NOTIFY
 	 * @param  String  parsed        Parsed SQL SELECT statement
 	 * @param  Array   params        Optionally, pass an array of parameters
-	 * @return Promise Object        Enumeration of differences
+	 * @return Object                Enumeration of differences
 	 */
-	async getDiffFromSupplied(client, notifications, parsed, params) {
+	getDiffFromSupplied(currentData, notifications, parsed, params) {
 		var allRows = flattenNotifications(notifications)
+		var matched = matchRows(allRows, parsed, params)
+		var newData = currentData.slice()
 
-		// ...
-	},
+		for(let curIndex of _.range(currentData.length)) {
+			let curRow = currentData[curIndex]
+			for(let matchRow of matched) {
+				let isSame = true
+				for(let column of Object.keys(curRow)) {
+					if(column !== '_hash'
+						&& column !== '_index
+						&& curRow[column] !== matchRow[column]) {
 
-	flattenNotifications(notifications) {
-		var out = []
-		var pushItem = (payload, key) => {
-			let data = _.clone(payload[key])
-			data._op = payload.op
-			data._key = key
-			data._index = payload.index
-			out.push(data)
+						isSame = false
+						break
+					}
+				}
+
+				if(isSame === true
+					&& (matchRow._op === 'DELETE'
+						|| (matchRow._op === 'UPDATE'
+							&& matchRow._key === 'old_data'))) {
+
+					newData[curIndex] = undefined
+				}
+			}
 		}
 
-		notifications.forEach((payload, index) => {
-			if(payload.op === 'UPDATE') {
-				pushItem(payload, 'new_data')
-				pushItem(payload, 'old_data')
+		for(let matchRow of matched) {
+			if(matchRow._op === 'INSERT'
+				|| (matchRow._op === 'UPDATE'
+					&& matchRow._key === 'new_data')) {
+				let addedRow = _.clone(matchRow)
+				delete addedRow._op
+				delete addedRow._key
+				newData.push(addedRow)
 			}
-			else {
-				pushItem(payload, 'data')
-			}
-		})
+		}
 
-		return out
+		// TODO: apply ORDER BY, LIMIT
+		//  OFFSET cannot be used with simple queries
 	},
 
 	/**
@@ -319,3 +336,26 @@ module.exports = exports = {
 
 }
 
+// Helper for getDiffFromSupplied
+function flattenNotifications(notifications) {
+	var out = []
+	var pushItem = (payload, key, index) => {
+		let data = _.clone(payload[key])
+		data._op = payload.op
+		data._key = key
+		data._index = index
+		out.push(data)
+	}
+
+	notifications.forEach((payload, index) => {
+		if(payload.op === 'UPDATE') {
+			pushItem(payload, 'new_data', index)
+			pushItem(payload, 'old_data', index)
+		}
+		else {
+			pushItem(payload, 'data', index)
+		}
+	})
+
+	return out
+}
