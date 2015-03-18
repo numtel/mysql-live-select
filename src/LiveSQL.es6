@@ -92,12 +92,10 @@ class LiveSQL extends EventEmitter {
 
 			queryBuffer.handlers.push(onUpdate)
 
-			if(bufferData.length !== 0) {
-				// Initial results from cache
-				onUpdate(
-					{ removed: null, moved: null, copied: null, added: queryBuffer.data },
-					queryBuffer.data)
-			}
+			// Initial results from cache
+			onUpdate(
+				{ removed: null, moved: null, copied: null, added: queryBuffer.data },
+				queryBuffer.data)
 		}
 		else {
 			// Initialize result set cache
