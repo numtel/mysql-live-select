@@ -33,6 +33,7 @@ class LiveSQL extends EventEmitter {
 		this.notifyHandle.client.on('notification', info => {
 			if(info.channel === this.channel) {
 				try {
+					// See common.createTableTrigger() for payload definition
 					var payload = JSON.parse(info.payload)
 				} catch(error) {
 					return this.emit('error',
@@ -105,7 +106,7 @@ class LiveSQL extends EventEmitter {
 		}
 		else {
 			// Initialize result set cache
-			this.selectBuffer[queryHash] = {
+			let newBuffer = this.selectBuffer[queryHash] = {
 				query,
 				params,
 				triggers,
@@ -128,10 +129,19 @@ class LiveSQL extends EventEmitter {
 			}
 
 			if(queryDetails.isUpdatable) {
+				// Query parser does not support tab characters
+				let cleanQuery = query.replace(/\t/g, ' ')
 				try {
-					this.selectBuffer[queryHash].parsed = sqlParser.parse(query)
+					newBuffer.parsed = sqlParser.parse(cleanQuery)
 				} catch(error) {
 					// Not a serious error, fallback to using full refreshing
+				}
+
+				// OFFSET and GROUP BY not supported with simple queries
+				if(newBuffer.parsed
+					&& ((newBuffer.parsed.limit && newBuffer.parsed.limit.offset)
+						|| newBuffer.parsed.group)) {
+					newBuffer.parsed = null
 				}
 			}
 
@@ -177,18 +187,22 @@ class LiveSQL extends EventEmitter {
 		let pgHandle = await common.getClient(this.connStr)
 
 		let queryBuffer = this.selectBuffer[queryHash]
-		let diff
-		// XXX: simple queries disabled!
-		if(1===2 && queryBuffer.parsed !== null) {
-			diff = await common.getDiffFromSupplied(
+		let update
+		if(queryBuffer.parsed !== null
+			// Notifications array will be empty for initial results
+			&& queryBuffer.notifications.length !== 0) {
+
+			update = await common.getDiffFromSupplied(
 				pgHandle.client,
+				queryBuffer.data,
 				queryBuffer.notifications.splice(0, queryBuffer.notifications.length),
+				queryBuffer.query,
 				queryBuffer.parsed,
 				queryBuffer.params
 			)
 		}
 		else{
-			diff = await common.getResultSetDiff(
+			update = await common.getResultSetDiff(
 				pgHandle.client,
 				queryBuffer.data,
 				queryBuffer.query,
@@ -198,12 +212,12 @@ class LiveSQL extends EventEmitter {
 
 		pgHandle.done()
 
-		if(diff !== null) {
-			queryBuffer.data = common.applyDiff(queryBuffer.data, diff)
+		if(update !== null) {
+			queryBuffer.data = update.data
 
 			for(let updateHandler of queryBuffer.handlers) {
 				updateHandler(
-					filterHashProperties(diff), filterHashProperties(queryBuffer.data))
+					filterHashProperties(update.diff), filterHashProperties(update.data))
 			}
 		}
 	}

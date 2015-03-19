@@ -1,8 +1,10 @@
 var _            = require('lodash')
+var md5          = require('md5')
 var pg           = require('pg')
 var randomString = require('random-strings')
 
-var matchRows = require('./matchRowsToParsedQuery')
+var collectionDiff = require('./collectionDiff')
+var matchRows      = require('./matchRowsToParsedQuery')
 
 module.exports = exports = {
 
@@ -146,16 +148,21 @@ module.exports = exports = {
 
 	/**
 	 * Using supplied NOTIFY payloads, check which rows match query
+	 * @param  Object  client        node-postgres client (Used only in fallback)
 	 * @param  Array   currentData   Last known result set for this query/params
 	 * @param  Array   notifications Payloads from NOTIFY
+	 * @param  String  query         SQL SELECT statement
 	 * @param  String  parsed        Parsed SQL SELECT statement
 	 * @param  Array   params        Optionally, pass an array of parameters
-	 * @return Object                Enumeration of differences
+	 * @return Promise Object        Enumeration of differences
 	 */
-	getDiffFromSupplied(currentData, notifications, parsed, params) {
-		var allRows = flattenNotifications(notifications)
-		var matched = matchRows(allRows, parsed, params)
-		var newData = currentData.slice()
+	async getDiffFromSupplied(
+		client, currentData, notifications, query, parsed, params) {
+
+		var allRows   = flattenNotifications(notifications)
+		var matched   = matchRows(allRows, parsed, params)
+		var newData   = currentData.slice()
+		var hasDelete = false
 
 		for(let curIndex of _.range(currentData.length)) {
 			let curRow = currentData[curIndex]
@@ -163,7 +170,7 @@ module.exports = exports = {
 				let isSame = true
 				for(let column of Object.keys(curRow)) {
 					if(column !== '_hash'
-						&& column !== '_index
+						&& column !== '_index'
 						&& curRow[column] !== matchRow[column]) {
 
 						isSame = false
@@ -177,23 +184,64 @@ module.exports = exports = {
 							&& matchRow._key === 'old_data'))) {
 
 					newData[curIndex] = undefined
+					hasDelete = true
 				}
 			}
+		}
+
+		if(hasDelete === true
+			&& parsed.limit
+			&& parsed.limit.value.value === currentData.length) {
+
+			// Force full refresh
+			return await exports.getResultSetDiff(client, currentData, query, params)
 		}
 
 		for(let matchRow of matched) {
 			if(matchRow._op === 'INSERT'
 				|| (matchRow._op === 'UPDATE'
 					&& matchRow._key === 'new_data')) {
+
 				let addedRow = _.clone(matchRow)
+				// All extra fields must be removed for hashing
 				delete addedRow._op
 				delete addedRow._key
+				delete addedRow._index
+
+				addedRow._hash = md5.digest_s(JSON.stringify(addedRow))
+				addedRow._added = 1
 				newData.push(addedRow)
 			}
 		}
 
-		// TODO: apply ORDER BY, LIMIT
-		//  OFFSET cannot be used with simple queries
+		// Clean out deleted rows
+		newData = newData.filter(row => row !== undefined)
+
+		// Apply ORDER BY, LIMIT
+		// Queries with unsupported clauses (e.g. OFFSET) filtered upstream
+		if(parsed.order) {
+			let sortProps = parsed.order.orderings.map(ordering =>
+				ordering.value.value)
+			let sortOrders = parsed.order.orderings.map(ordering =>
+				ordering.direction.toUpperCase() === 'ASC')
+			newData = _.sortByOrder(newData, sortProps, sortOrders)
+		}
+
+		if(parsed.limit) {
+			newData = newData.slice(0, parsed.limit.value.value)
+		}
+
+		// Fix indexes
+		for(let index of _.range(newData.length)) {
+			newData[index]._index = index + 1
+		}
+
+		var oldHashes = currentData.map(row => row._hash)
+		var diff = collectionDiff(oldHashes, newData)
+
+		if(diff === null) return null
+
+		return { diff, data: newData }
 	},
 
 	/**
@@ -229,74 +277,13 @@ module.exports = exports = {
 			LEFT JOIN data2
 				ON (data._index = data2._index)`, params)
 
-		var curHashes = result.rows.map(row => row._hash)
-		var newHashes = curHashes.filter(hash => oldHashes.indexOf(hash) === -1)
+		var diff = collectionDiff(oldHashes, result.rows)
 
-		// Need copy of curHashes so duplicates can be checked off
-		var curHashes2 = curHashes.slice()
-		var addedRows = result.rows
-			.filter(row => row._added === 1)
-			.map(row => {
-				// Prepare row meta-data
-				row._index = curHashes2.indexOf(row._hash) + 1
-				delete row._added
+		if(diff === null) return null
 
-				// Clear this hash so that duplicate hashes can move forward
-				curHashes2[row._index - 1] = undefined
+		var newData = exports.applyDiff(currentData, diff)
 
-				return row
-			})
-
-		var movedHashes = curHashes.map((hash, newIndex) => {
-			let oldIndex = oldHashes.indexOf(hash)
-
-			if(oldIndex !== -1 &&
-					oldIndex !== newIndex &&
-					curHashes[oldIndex] !== hash) {
-				return {
-					old_index: oldIndex + 1,
-					new_index: newIndex + 1,
-					_hash: hash
-				}
-			}
-		}).filter(moved => moved !== undefined)
-
-		var removedHashes = oldHashes
-			.map((_hash, index) => { return { _hash, _index: index + 1 } })
-			.filter(removed =>
-				curHashes[removed._index - 1] !== removed._hash &&
-				movedHashes.filter(moved =>
-					moved.new_index === removed._index).length === 0)
-
-		// Add rows that have already existing hash but in new places
-		var copiedHashes = curHashes.map((hash, index) => {
-			var oldHashIndex = oldHashes.indexOf(hash)
-			if(oldHashIndex !== -1 &&
-					oldHashes[index] !== hash &&
-					movedHashes.filter(moved =>
-						moved.new_index - 1 === index).length === 0 &&
-					addedRows.filter(added =>
-						added._index - 1 === index).length === 0){
-				return {
-					new_index: index + 1,
-					orig_index: oldHashIndex + 1
-				}
-			}
-		}).filter(copied => copied !== undefined)
-
-		var diff = {
-			removed: removedHashes.length !== 0 ? removedHashes : null,
-			moved: movedHashes.length !== 0 ? movedHashes: null,
-			copied: copiedHashes.length !== 0 ? copiedHashes: null,
-			added: addedRows.length !== 0 ? addedRows : null
-		}
-
-		if(diff.added === null &&
-				diff.moved === null &&
-				diff.copied === null &&
-				diff.removed === null) return null
-
-		return diff
+		return { diff, data: newData }
 	},
 
 	/**
@@ -340,7 +327,7 @@ module.exports = exports = {
 function flattenNotifications(notifications) {
 	var out = []
 	var pushItem = (payload, key, index) => {
-		let data = _.clone(payload[key])
+		let data = _.clone(payload[key][0])
 		data._op = payload.op
 		data._key = key
 		data._index = index
