@@ -39,6 +39,10 @@ module.exports = exports = {
 		})
 	},
 
+	nextTick() {
+		return new Promise((resolve, reject) => process.nextTick(resolve))
+	},
+
 	/**
 	 * Query information_schema to determine tables used and if updatable
 	 * @param  Object client node-postgres client
@@ -159,33 +163,46 @@ module.exports = exports = {
 	async getDiffFromSupplied(
 		client, currentData, notifications, query, parsed, params) {
 
+		await exports.nextTick()
+
 		var allRows   = flattenNotifications(notifications)
+
+		await exports.nextTick()
+
 		var matched   = matchRows(allRows, parsed, params)
+		if(matched.length === 0) return null
+
+		var oldHashes = currentData.map(row => row._hash)
+		await exports.nextTick()
 		var newData   = currentData.slice()
 		var hasDelete = false
 
-		for(let curIndex of _.range(currentData.length)) {
-			let curRow = currentData[curIndex]
-			for(let matchRow of matched) {
-				let isSame = true
-				for(let column of Object.keys(curRow)) {
-					if(column !== '_hash'
-						&& column !== '_index'
-						&& curRow[column] !== matchRow[column]) {
+		for(let matchRow of matched) {
 
-						isSame = false
-						break
-					}
-				}
+			let cleanRow = _.clone(matchRow)
+			// All extra fields must be removed for hashing
+			delete cleanRow._op
+			delete cleanRow._key
+			delete cleanRow._index
 
-				if(isSame === true
-					&& (matchRow._op === 'DELETE'
-						|| (matchRow._op === 'UPDATE'
-							&& matchRow._key === 'old_data'))) {
+			cleanRow._hash = md5.digest_s(JSON.stringify(cleanRow))
 
-					newData[curIndex] = undefined
-					hasDelete = true
-				}
+			let curIndex = oldHashes.indexOf(cleanRow._hash)
+
+			if(curIndex !== -1
+				&& (matchRow._op === 'DELETE'
+					|| (matchRow._op === 'UPDATE'
+						&& matchRow._key === 'old_data'))) {
+
+				newData[curIndex] = undefined
+				hasDelete = true
+			}
+
+			if(matchRow._op === 'INSERT'
+				|| (matchRow._op === 'UPDATE'
+					&& matchRow._key === 'new_data')) {
+				cleanRow._added = 1
+				newData.push(cleanRow)
 			}
 		}
 
@@ -195,23 +212,6 @@ module.exports = exports = {
 
 			// Force full refresh
 			return await exports.getResultSetDiff(client, currentData, query, params)
-		}
-
-		for(let matchRow of matched) {
-			if(matchRow._op === 'INSERT'
-				|| (matchRow._op === 'UPDATE'
-					&& matchRow._key === 'new_data')) {
-
-				let addedRow = _.clone(matchRow)
-				// All extra fields must be removed for hashing
-				delete addedRow._op
-				delete addedRow._key
-				delete addedRow._index
-
-				addedRow._hash = md5.digest_s(JSON.stringify(addedRow))
-				addedRow._added = 1
-				newData.push(addedRow)
-			}
 		}
 
 		// Clean out deleted rows
@@ -236,7 +236,6 @@ module.exports = exports = {
 			newData[index]._index = index + 1
 		}
 
-		var oldHashes = currentData.map(row => row._hash)
 		var diff = collectionDiff(oldHashes, newData)
 
 		if(diff === null) return null
