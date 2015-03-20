@@ -39,6 +39,8 @@ setInterval(function() {
 		Date.now(),
 		mem.heapTotal,
 		mem.heapUsed,
+		liveDb ? liveDb.refreshCount : '0',
+		liveDb ? liveDb.notifyCount : '0'
 	].join(' '))
 }, 500)
 

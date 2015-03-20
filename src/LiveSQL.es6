@@ -20,6 +20,7 @@ class LiveSQL extends EventEmitter {
 		this.queryDetailsCache = {}
 		// DEBUG HELPER
 		this.refreshCount    = 0
+		this.notifyCount     = 0
 
 		this.ready = this.init()
 	}
@@ -32,6 +33,8 @@ class LiveSQL extends EventEmitter {
 
 		this.notifyHandle.client.on('notification', info => {
 			if(info.channel === this.channel) {
+				this.notifyCount++
+
 				try {
 					// See common.createTableTrigger() for payload definition
 					var payload = JSON.parse(info.payload)

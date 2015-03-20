@@ -11,8 +11,8 @@ module.exports = {
 	// TODO multiplier may cause issues at this point!
 	instanceMultiplier: 1,
 	opPerSecond: {
-		insert: 0,
-		update: 10,
+		insert: 90,
+		update: 90,
 	}
 }
 

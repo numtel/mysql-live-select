@@ -2,7 +2,7 @@ var _ = require('lodash')
 var LiveSQL = require('../../../')
 var common = require('../../../src/common')
 
-var liveDb = new LiveSQL(options.conn, options.channel)
+var liveDb = global.liveDb = new LiveSQL(options.conn, options.channel)
 
 liveDb.on('error', function(error) {
 	console.error(error)
@@ -34,7 +34,6 @@ module.exports = _.flatten(_.range(settings.instanceMultiplier || 1)
 				'CLASS_UPDATE',
 				Date.now(),
 				index + 1,
-				liveDb.refreshCount,
 				scoreIds
 			].join(' '))
 		})

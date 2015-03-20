@@ -81,7 +81,9 @@ var childPromise = new Promise((resolve, reject) => {
 					memoryUsage.push({
 						time: parseInt(data[1], 10),
 						memory: parseInt(data[2], 10),
-						memoryUsed: parseInt(data[3], 10)
+						memoryUsed: parseInt(data[3], 10),
+						refreshCount: parseInt(data[4], 10),
+						notifyCount: parseInt(data[5], 10)
 					})
 					break
 				case 'NEXT_EVENT':
@@ -92,8 +94,7 @@ var childPromise = new Promise((resolve, reject) => {
 					// Default "end-to-end" load test mode will log score updates
 					var eventTime = parseInt(data[1], 10)
 					var classId = parseInt(data[2], 10)
-					var refreshCount = parseInt(data[3], 10)
-					var scoreIds = data[4].split(',').map(scoreDetails => 
+					var scoreIds = data[3].split(',').map(scoreDetails =>
 						scoreDetails.split('@').map(num => parseInt(num, 10)))
 					var responseTimes = null
 
@@ -113,7 +114,6 @@ var childPromise = new Promise((resolve, reject) => {
 
 					classUpdates.push({
 						time: eventTime,
-						refreshCount,
 						responseTimes
 					})
 
@@ -292,6 +292,30 @@ process.on('SIGINT', () => {
 		console.log(babar(memory2Prep, {
 			caption: 'Memory Usage (Heap Used) by Elapsed Time (Megabytes / Seconds)'
 		}))
+
+		// Print refreshes count over elapsed time graph
+		if(memoryUsage[memoryUsage.length - 1].refreshCount !== 0) {
+			var refreshPrep = memoryUsage.map(evt => [
+				(evt.time - firstMemTime) / 1000,
+				evt.refreshCount
+			])
+
+			console.log(babar(refreshPrep, {
+				caption: 'Refresh Count over Elapsed Time'
+			}))
+		}
+
+		// Print notifies count over elapsed time graph
+		if(memoryUsage[memoryUsage.length - 1].notifyCount !== 0) {
+			var notifyPrep = memoryUsage.map(evt => [
+				(evt.time - firstMemTime) / 1000,
+				evt.notifyCount
+			])
+
+			console.log(babar(notifyPrep, {
+				caption: 'Notification Count over Elapsed Time'
+			}))
+		}
 	}
 
 	if(eventTimes.length !== 0) {
@@ -340,7 +364,7 @@ process.on('SIGINT', () => {
 		}, []).map((count, secondNumber) => [ secondNumber, count ])
 
 		console.log(babar(respPrep, {
-			caption: 'Responses per Second Elapsed'
+			caption: 'Responses at Second Elapsed'
 		}))
 
 		var respPrepTable = respPrep.map(evt => evt[1])
@@ -349,16 +373,6 @@ process.on('SIGINT', () => {
 				'Percentile': percentile * 100,
 				'Time (ms)': Math.round(stats.quantile(respPrepTable, percentile))
 			}
-		}))
-
-		// Print refreshes count over elapsed time graph
-		var refreshPrep = filteredEvents.map(evt => [
-			(evt.time - firstMemTime) / 1000,
-			evt.refreshCount
-		])
-
-		console.log(babar(refreshPrep, {
-			caption: 'Refresh Count over Elapsed Time'
 		}))
 	}
 
