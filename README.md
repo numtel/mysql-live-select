@@ -38,4 +38,4 @@ Please see the [Performing Tests wiki page](https://github.com/FocusSchoolSoftwa
 
 ## License
 
-LGPL V2.1
+MIT
