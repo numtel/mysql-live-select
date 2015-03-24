@@ -4,7 +4,7 @@
 	"description" : "LiveQuery implementation for PostgreSQL",
 	"main"        : "lib/LiveSQL.js",
 	"license"     : "LGPLv2.1",
-	"repository"  : "https://github.com/FocusSchoolSoftware/pg-live-query.git",
+	"repository"  : "https://github.com/nothingisdead/pg-live-query.git",
 
 	"contributors" : [
 		"numtel <ben@latenightsketches.com>",
