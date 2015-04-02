@@ -2,6 +2,8 @@
 
 This package exposes the `LiveSQL` class in order to provide realtime result sets for PostgreSQL `SELECT` statements.
 
+**Postgres 9.3+ is required.**
+
 ## Implements
 
 ### LiveSQL Class
