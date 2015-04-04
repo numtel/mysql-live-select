@@ -86,6 +86,8 @@ exports.install = function(generation) {
 			 _.flatten(rowShard.map(row => _.values(row))) ]
 		}))
 
+		installQueries.push(`ANALYZE ${table}`)
+
 		return querySequence(installQueries)
 	}))
 
