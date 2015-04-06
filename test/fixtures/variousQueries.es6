@@ -501,13 +501,14 @@ exports.cases.allExpression = {
 	]
 }
 
+// This also tests column ordering and renaming for simple queries
 exports.cases.sortMoved = {
-	query: `SELECT score FROM scores ORDER BY score DESC`,
+	query: `SELECT score, assignment_id AS assign FROM scores ORDER BY score DESC`,
 	events: [
 		{ data: [
-			{ score: 54, _index: 1 },
-			{ score: 52, _index: 2 },
-			{ score: 28, _index: 3 }
+			{ score: 54, assign: 1, _index: 1 },
+			{ score: 52, assign: 1, _index: 2 },
+			{ score: 28, assign: 1, _index: 3 }
 		] },
 		{ perform: [
 			`UPDATE scores SET score = 200 WHERE id = 3`
@@ -518,7 +519,7 @@ exports.cases.sortMoved = {
 				{ old_index: 1, new_index: 2 },
 				{ old_index: 2, new_index: 3 } ],
 			copied: null,
-			added: [ { score: 200, _index: 1 } ]
+			added: [ { score: 200, assign: 1, _index: 1 } ]
 		} }
 	]
 }

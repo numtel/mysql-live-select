@@ -39,8 +39,8 @@ module.exports = exports = {
 		})
 	},
 
-	nextTick() {
-		return new Promise((resolve, reject) => process.nextTick(resolve))
+	delay(duration=0) {
+		return new Promise((resolve, reject) => setTimeout(resolve, duration))
 	},
 
 	/**
@@ -163,17 +163,13 @@ module.exports = exports = {
 	async getDiffFromSupplied(
 		client, currentData, notifications, query, parsed, params) {
 
-		await exports.nextTick()
+		await exports.delay()
 
 		var allRows   = flattenNotifications(notifications)
-
-		await exports.nextTick()
-
 		var matched   = matchRows(allRows, parsed, params)
 		if(matched.length === 0) return null
 
 		var oldHashes = currentData.map(row => row._hash)
-		await exports.nextTick()
 		var newData   = currentData.slice()
 		var hasDelete = false
 
@@ -184,6 +180,25 @@ module.exports = exports = {
 			delete cleanRow._op
 			delete cleanRow._key
 			delete cleanRow._index
+
+			// Remove any columns not selected by query
+			if(!(parsed.fields.length === 1
+				&& parsed.fields[0].constructor.name === 'Star')) {
+
+				let columnsSelected = {}
+				parsed.fields.forEach(item => {
+					// If the column is renamed in the output, rename the column
+					columnsSelected[item.field.value] =
+						item.name ? item.name.value : item.field.value
+				})
+
+				// Build new row with correct columns included and sorted
+				let reformedRow = {}
+				for(let column of Object.keys(columnsSelected)) {
+					reformedRow[columnsSelected[column]] = cleanRow[column]
+				}
+				cleanRow = reformedRow
+			}
 
 			cleanRow._hash = md5.digest_s(JSON.stringify(cleanRow))
 
@@ -259,9 +274,9 @@ module.exports = exports = {
 				res AS (${query}),
 				data AS (
 					SELECT
+						res.*,
 						MD5(CAST(ROW_TO_JSON(res.*) AS TEXT)) AS _hash,
-						ROW_NUMBER() OVER () AS _index,
-						res.*
+						ROW_NUMBER() OVER () AS _index
 					FROM res),
 				data2 AS (
 					SELECT

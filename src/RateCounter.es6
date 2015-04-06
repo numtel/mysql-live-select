@@ -1,7 +1,11 @@
-
+/*
+ * Simple class to determine the rate of change for a number
+ */
 class RateCounter {
 	constructor() {
+		// Operations so far this second
 		this.incrementor = 0
+		// Operations per second, for the previous second
 		this.rate = 0
 
 		this.updateInterval = setInterval(() => {

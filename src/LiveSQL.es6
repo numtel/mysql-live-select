@@ -6,10 +6,26 @@ var sqlParser    = require('sql-parser')
 var common      = require('./common')
 var RateCounter = require('./RateCounter')
 
-// Number of milliseconds between refreshes
-function calcInterval(rate) {
-	return 100 + (45 * rate)
-}
+/*
+ * Global flag to disable simple query optimization
+ * Simple queries are those which select from only one table without any
+ *  aggregate functions, OFFSET, or GROUP BY used
+ * When enabled, these queries will keep the result set current without
+ *  repeatedly executing the query on each change
+ * TODO Notification payload pagination at 8000 bytes
+ */
+const ENABLE_SIMPLE_QUERIES = true
+
+/*
+ * Calculate the duration between refreshing result sets
+ * As the rate increases, the duration increases to compensate for the time
+ *  needed to run the queries
+ * TODO Could this be estimated differently?
+ *  -> Why not wait for current batch to finish, the grab new batch?
+ * @param Integer rate Number of queries to refresh per second
+ * @return Integer Timeout duration (ms)
+ */
+var calcInterval = (rate) => 100 + (45 * rate)
 
 class LiveSQL extends EventEmitter {
 	constructor(connStr, channel) {
@@ -21,7 +37,7 @@ class LiveSQL extends EventEmitter {
 		this.tablesUsed        = {}
 		this.queryDetailsCache = {}
 		this.refreshRate       = new RateCounter
-		// DEBUG HELPERS
+		// XXX Extra stats for debugging load test
 		this.refreshCount      = 0
 		this.notifyCount       = 0
 
@@ -36,6 +52,7 @@ class LiveSQL extends EventEmitter {
 
 		this.notifyHandle.client.on('notification', info => {
 			if(info.channel === this.channel) {
+				// XXX this.notifyCount is only used for debugging the load test
 				this.notifyCount++
 
 				try {
@@ -53,8 +70,10 @@ class LiveSQL extends EventEmitter {
 								// Check for true response from manual trigger
 								&& payload.table in queryBuffer.triggers
 								&& (payload.op === 'UPDATE'
+									// Rows changed in an UPDATE operation must check old and new
 									? queryBuffer.triggers[payload.table](payload.new_data[0])
 										|| queryBuffer.triggers[payload.table](payload.old_data[0])
+									// Rows changed in INSERT/DELETE operations only check once
 									: queryBuffer.triggers[payload.table](payload.data[0])))
 							|| (queryBuffer.triggers
 								// No manual trigger for this table
@@ -72,10 +91,14 @@ class LiveSQL extends EventEmitter {
 			}
 		})
 
+		// Initialize neverending loop to refresh active result sets
 		var performNextUpdate = () => {
 			let queriesToUpdate =
 				_.uniq(this.waitingToUpdate.splice(0, this.waitingToUpdate.length))
+
+			// XXX this.refreshCount is only used for debugging the load test
 			this.refreshCount += queriesToUpdate.length
+
 			this.refreshRate.inc(queriesToUpdate.length)
 
 			for(let queryHash of queriesToUpdate) {
@@ -138,7 +161,7 @@ class LiveSQL extends EventEmitter {
 				this.queryDetailsCache[query] = queryDetails
 			}
 
-			if(queryDetails.isUpdatable) {
+			if(ENABLE_SIMPLE_QUERIES && queryDetails.isUpdatable) {
 				// Query parser does not support tab characters
 				let cleanQuery = query.replace(/\t/g, ' ')
 				try {
@@ -153,6 +176,8 @@ class LiveSQL extends EventEmitter {
 						|| newBuffer.parsed.group)) {
 					newBuffer.parsed = null
 				}
+
+				// TODO ensure that query selects primary key column
 			}
 
 			for(let table of queryDetails.tablesUsed) {
