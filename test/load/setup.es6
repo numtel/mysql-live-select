@@ -83,7 +83,8 @@ var childPromise = new Promise((resolve, reject) => {
 						memory: parseInt(data[2], 10),
 						memoryUsed: parseInt(data[3], 10),
 						refreshCount: parseInt(data[4], 10),
-						notifyCount: parseInt(data[5], 10)
+						notifyCount: parseInt(data[5], 10),
+						refreshRate: parseInt(data[6], 10)
 					})
 					break
 				case 'NEXT_EVENT':
@@ -316,6 +317,16 @@ process.on('SIGINT', () => {
 				caption: 'Notification Count over Elapsed Time'
 			}))
 		}
+
+		// Print refresh rate at elapsed time graph
+		var refreshRatePrep = memoryUsage.map(evt => [
+			(evt.time - firstMemTime) / 1000,
+			evt.refreshRate
+		])
+
+		console.log(babar(refreshRatePrep, {
+			caption: 'Refresh Rate at Elapsed Time'
+		}))
 	}
 
 	if(eventTimes.length !== 0) {

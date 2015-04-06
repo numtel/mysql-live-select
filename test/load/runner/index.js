@@ -40,7 +40,8 @@ setInterval(function() {
 		mem.heapTotal,
 		mem.heapUsed,
 		global.liveDb ? global.liveDb.refreshCount : '0',
-		global.liveDb ? global.liveDb.notifyCount : '0'
+		global.liveDb ? global.liveDb.notifyCount : '0',
+		global.liveDb ? global.liveDb.refreshRate.rate : '0'
 	].join(' '))
 }, 500)
 

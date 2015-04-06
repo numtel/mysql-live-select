@@ -3,24 +3,27 @@ var _            = require('lodash')
 var murmurHash   = require('murmurhash-js').murmur3
 var sqlParser    = require('sql-parser')
 
-var common     = require('./common')
+var common      = require('./common')
+var RateCounter = require('./RateCounter')
 
 // Number of milliseconds between refreshes
-const THROTTLE_INTERVAL = 500
+function calcInterval(rate) {
+	return 100 + (45 * rate)
+}
 
 class LiveSQL extends EventEmitter {
 	constructor(connStr, channel) {
-		this.connStr         = connStr
-		this.channel         = channel
-		this.notifyHandle    = null
-		this.updateInterval  = null
-		this.waitingToUpdate = []
-		this.selectBuffer    = {}
-		this.tablesUsed      = {}
+		this.connStr           = connStr
+		this.channel           = channel
+		this.notifyHandle      = null
+		this.waitingToUpdate   = []
+		this.selectBuffer      = {}
+		this.tablesUsed        = {}
 		this.queryDetailsCache = {}
-		// DEBUG HELPER
-		this.refreshCount    = 0
-		this.notifyCount     = 0
+		this.refreshRate       = new RateCounter
+		// DEBUG HELPERS
+		this.refreshCount      = 0
+		this.notifyCount       = 0
 
 		this.ready = this.init()
 	}
@@ -69,15 +72,19 @@ class LiveSQL extends EventEmitter {
 			}
 		})
 
-		this.updateInterval = setInterval(() => {
+		var performNextUpdate = () => {
 			let queriesToUpdate =
 				_.uniq(this.waitingToUpdate.splice(0, this.waitingToUpdate.length))
 			this.refreshCount += queriesToUpdate.length
+			this.refreshRate.inc(queriesToUpdate.length)
 
 			for(let queryHash of queriesToUpdate) {
 				this._updateQuery(queryHash)
 			}
-		}.bind(this), THROTTLE_INTERVAL)
+
+			setTimeout(performNextUpdate, calcInterval(this.refreshRate.rate))
+		}.bind(this)
+		performNextUpdate()
 	}
 
 	async select(query, params, onUpdate, triggers) {
@@ -227,8 +234,6 @@ class LiveSQL extends EventEmitter {
 
 	async cleanup() {
 		this.notifyHandle.done()
-
-		clearInterval(this.updateInterval)
 
 		let pgHandle = await common.getClient(this.connStr)
 
