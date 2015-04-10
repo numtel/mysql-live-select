@@ -71,7 +71,7 @@ exports.scoresLoad = function(test) {
 						(students.id = scores.student_id)
 					WHERE
 						assignments.class_id = $1
-				`, [ index + 1 ], (diff) => {
+				`, [ index + 1 ]).on('update', diff => {
 					switch(curStage){
 						case 0:
 							readyCount++
@@ -118,8 +118,7 @@ exports.scoresLoad = function(test) {
 									printDebug && console.log(JSON.stringify(memoryUsageSnapshots))
 								}
 								// Make sure all are stopped
-								liveSelects.forEach(thisSelect =>
-									thisSelect.then(handle => handle.stop()))
+								liveSelects.forEach(thisSelect => thisSelect.stop())
 								test.done()
 							}
 							break

@@ -25,7 +25,7 @@ liveDb.select(`
 		assignments.class_id = $1
 	ORDER BY
 		score DESC
-`, [ 1 ], (diff, rows) => {
+`, [ 1 ]).on('update', (diff, rows) => {
 	console.log(util.inspect(diff, { depth: null }), rows)
 })
 

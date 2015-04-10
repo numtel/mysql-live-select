@@ -33,7 +33,9 @@ module.exports = _.flatten(_.range(settings.instanceMultiplier || 1)
 			assignments.class_id = $1
 		ORDER BY
 			score_id ASC
-	`, [ index + 1 ], (diff, rows) => {
+	`, [ index + 1 ])
+
+	select.on('update', (diff, rows) => {
 		var scoreIds = ''
 		if(diff.added) {
 			scoreIds = diff.added.map(row => row.score_id + '@' + row.score).join(',')

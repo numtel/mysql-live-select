@@ -13,7 +13,7 @@ liveDb.select(`
 		scores
 	ORDER BY
 		score DESC
-`, (diff, rows) => {
+`).on('update', (diff, rows) => {
 	console.log(util.inspect(diff, { depth: null }), rows)
 })
 

@@ -24,8 +24,8 @@ exports.variousQueries = function(test) {
 				.then(result => {
 					var updateLog  = [] // Cache for any updates to this query
 					var nextLogPos = 0 // Length at last action performed
-					var select     = liveDb.select(query, (diff, data) =>
-						updateLog.push({ diff, data }))
+					var select     = liveDb.select(query).on('update',
+						(diff, data) => updateLog.push({ diff, data }))
 
 					// For each event, check values or perform action, then continue
 					var processEvents = (callback, index) => {
@@ -52,11 +52,8 @@ exports.variousQueries = function(test) {
 									}, reject)
 									break
 								case 'stop':
-									select.then(handle => {
-										handle.stop().then(() => {
-											processEvents(callback, index + 1)
-										})
-									})
+									select.stop()
+									processEvents(callback, index + 1)
 								case 'diff':
 								case 'data':
 									if(updateLog.length === nextLogPos) {
@@ -92,7 +89,7 @@ exports.variousQueries = function(test) {
 						})
 					}
 					processEvents(() => {
-						select.then(handle => handle.stop())
+						select.stop()
 						resolve()
 					})
 				})

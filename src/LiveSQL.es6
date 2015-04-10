@@ -3,8 +3,9 @@ var _            = require('lodash')
 var murmurHash   = require('murmurhash-js').murmur3
 var sqlParser    = require('sql-parser')
 
-var common      = require('./common')
-var RateCounter = require('./RateCounter')
+var common       = require('./common')
+var RateCounter  = require('./RateCounter')
+var SelectHandle = require('./SelectHandle')
 
 /*
  * Global flag to disable simple query optimization
@@ -84,6 +85,7 @@ class LiveSQL extends EventEmitter {
 								queryBuffer.notifications.push(payload)
 							}
 
+							// TODO simple queries need not wait!
 							this.waitingToUpdate.push(queryHash)
 						}
 					}
@@ -110,11 +112,13 @@ class LiveSQL extends EventEmitter {
 		performNextUpdate()
 	}
 
-	async select(query, params, onUpdate, triggers) {
+	select(query, params, triggers) {
 		// Allow omission of params argument
-		if(typeof params === 'function' && typeof onUpdate === 'undefined') {
-			triggers = onUpdate
-			onUpdate = params
+		if(typeof params === 'object' && !(params instanceof Array)) {
+			triggers = params
+			params = []
+		}
+		else if(typeof params === 'undefined') {
 			params = []
 		}
 
@@ -122,18 +126,27 @@ class LiveSQL extends EventEmitter {
 			throw new Error('QUERY_STRING_MISSING')
 		if(!(params instanceof Array))
 			throw new Error('PARAMS_ARRAY_MISMATCH')
-		if(typeof onUpdate !== 'function')
-			throw new Error('UPDATE_FUNCTION_MISSING')
 
 		let queryHash = murmurHash(JSON.stringify([ query, params ]))
+		let handle = new SelectHandle(this, queryHash)
 
+		// Perform initialization asynchronously
+		this._initSelect(query, params, triggers, queryHash, handle)
+
+		return handle
+	}
+
+	async _initSelect(query, params, triggers, queryHash, handle) {
 		if(queryHash in this.selectBuffer) {
 			let queryBuffer = this.selectBuffer[queryHash]
 
-			queryBuffer.handlers.push(onUpdate)
+			queryBuffer.handlers.push(handle)
+
+			// Give a chance for event listener to be added
+			common.delay()
 
 			// Initial results from cache
-			onUpdate(
+			handle.emit('update',
 				{ removed: null, moved: null, copied: null, added: queryBuffer.data },
 				queryBuffer.data)
 		}
@@ -144,7 +157,7 @@ class LiveSQL extends EventEmitter {
 				params,
 				triggers,
 				data          : [],
-				handlers      : [ onUpdate ],
+				handlers      : [ handle ],
 				// Queries that have parsed property are simple and may be updated
 				//  without re-running the query
 				parsed        : null,
@@ -164,6 +177,8 @@ class LiveSQL extends EventEmitter {
 			if(ENABLE_SIMPLE_QUERIES && queryDetails.isUpdatable) {
 				// Query parser does not support tab characters
 				let cleanQuery = query.replace(/\t/g, ' ')
+				// TODO move sqlParser to separate process to prevent event loop block?
+				//  or use external native postgres parser?
 				try {
 					newBuffer.parsed = sqlParser.parse(cleanQuery)
 				} catch(error) {
@@ -195,27 +210,6 @@ class LiveSQL extends EventEmitter {
 			// Retrieve initial results
 			this.waitingToUpdate.push(queryHash)
 		}
-
-		let stop = async function() {
-			let queryBuffer = this.selectBuffer[queryHash]
-
-			if(queryBuffer) {
-				_.pull(queryBuffer.handlers, onUpdate)
-
-				if(queryBuffer.handlers.length === 0) {
-					// No more query/params like this, remove from buffers
-					delete this.selectBuffer[queryHash]
-					_.pull(this.waitingToUpdate, queryHash)
-
-					for(let table of Object.keys(this.tablesUsed)) {
-						_.pull(this.tablesUsed[table], queryHash)
-					}
-				}
-			}
-
-		}.bind(this)
-
-		return { stop }
 	}
 
 	async _updateQuery(queryHash) {
@@ -251,7 +245,7 @@ class LiveSQL extends EventEmitter {
 			queryBuffer.data = update.data
 
 			for(let updateHandler of queryBuffer.handlers) {
-				updateHandler(
+				updateHandler.emit('update',
 					filterHashProperties(update.diff), filterHashProperties(update.data))
 			}
 		}
@@ -271,6 +265,8 @@ class LiveSQL extends EventEmitter {
 }
 
 module.exports = LiveSQL
+// Expose SelectHandle class so it may be modified by application
+module.exports.SelectHandle = SelectHandle
 
 function filterHashProperties(diff) {
 	if(diff instanceof Array) {

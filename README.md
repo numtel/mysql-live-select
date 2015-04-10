@@ -17,12 +17,12 @@ Constructor Argument | Type | Description
 
 A single persistent client is used to listen for notifications. Result set refreshes obtain additional clients from the pool on-demand.
 
-Each instance offers the following asynchronous methods (both return Promises):
+Each instance offers the following methods:
 
 Method | Returns | Description
 -------|---------|-----------------
-`select(query, params, onUpdate, triggers)` | `{ stop() }` handle `Object` | Call `onUpdate` with new data on initialization and each change. `query` only accepts string. Optional `params` argument accepts array. Optional `triggers` argument accepts an object with table names as keys and lambda function values accepting a singlue argument, the row object. 
-`cleanup()` | *Undefined* | Drop all table triggers and close all connections.
+`select(query, params, triggers)` | `{ stop() }` handle `EventEmitter` | Call `<returnedHandle>.on('update', function(diff, data){})` to receive result set updates. `query` only accepts string. Optional `params` argument accepts array. Optional `triggers` argument accepts an object with table names as keys and lambda function values accepting a single argument, the row object.
+`cleanup()` | Promise | Drop all table triggers and close all connections.
 
 ## Simple Example
 
