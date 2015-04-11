@@ -501,9 +501,10 @@ exports.cases.allExpression = {
 	]
 }
 
-// This also tests column ordering and renaming for simple queries
+// Not simple query because it doesn't include primary key
 exports.cases.sortMoved = {
 	query: `SELECT score, assignment_id AS assign FROM scores ORDER BY score DESC`,
+	expectSimple: false,
 	events: [
 		{ data: [
 			{ score: 54, assign: 1, _index: 1 },
@@ -521,6 +522,50 @@ exports.cases.sortMoved = {
 			copied: null,
 			added: [ { score: 200, assign: 1, _index: 1 } ]
 		} }
+	]
+}
+
+// This also tests column ordering and renaming for simple queries
+exports.cases.simpleQuery1 = {
+	query: `
+		SELECT
+			id as rename_id,
+			score,
+			assignment_id AS assign
+		FROM
+			scores
+		ORDER BY
+			score DESC`,
+	expectSimple: true,
+	events: [
+		{ data: [
+			{ rename_id: 2, score: 54, assign: 1, _index: 1 },
+			{ rename_id: 1, score: 52, assign: 1, _index: 2 },
+			{ rename_id: 3, score: 28, assign: 1, _index: 3 }
+		] },
+		{ perform: [
+			`UPDATE scores SET score = 200 WHERE id = 3`
+		] },
+		{ diff: {
+			removed: [ { _index: 1 } ],
+			moved: [
+				{ old_index: 1, new_index: 2 },
+				{ old_index: 2, new_index: 3 } ],
+			copied: null,
+			added: [ { rename_id: 3, score: 200, assign: 1, _index: 1 } ]
+		} }
+	]
+}
+
+exports.cases.simpleQuery2 = {
+	query: `SELECT * FROM scores ORDER BY score DESC`,
+	expectSimple: true,
+	events: [
+		{ data: [
+			{ id: 2, assignment_id: 1, student_id: 2, score: 54, _index: 1 },
+			{ id: 1, assignment_id: 1, student_id: 1, score: 52, _index: 2 },
+			{ id: 3, assignment_id: 1, student_id: 3, score: 28, _index: 3 }
+		] }
 	]
 }
 

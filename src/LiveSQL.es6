@@ -132,6 +132,7 @@ class LiveSQL extends EventEmitter {
 
 		// Perform initialization asynchronously
 		this._initSelect(query, params, triggers, queryHash, handle)
+			.catch(reason => this.emit('error', reason))
 
 		return handle
 	}
@@ -143,7 +144,7 @@ class LiveSQL extends EventEmitter {
 			queryBuffer.handlers.push(handle)
 
 			// Give a chance for event listener to be added
-			common.delay()
+			await common.delay()
 
 			// Initial results from cache
 			handle.emit('update',
@@ -191,8 +192,17 @@ class LiveSQL extends EventEmitter {
 						|| newBuffer.parsed.group)) {
 					newBuffer.parsed = null
 				}
-
-				// TODO ensure that query selects primary key column
+				// Ensure that table used has primary key
+				else if(queryDetails.primaryKeys.length === 0) {
+					newBuffer.parsed = null
+				}
+				// Ensure that query selects primary key column
+				else if(!(newBuffer.parsed.fields.length === 1
+						&& newBuffer.parsed.fields[0].constructor.name === 'Star')
+					&& newBuffer.parsed.fields.filter(item =>
+						queryDetails.primaryKeys.indexOf(item.field.value) !== -1).length === 0) {
+					newBuffer.parsed = null
+				}
 			}
 
 			for(let table of queryDetails.tablesUsed) {

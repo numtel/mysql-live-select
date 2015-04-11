@@ -1,5 +1,4 @@
 var EventEmitter = require('events').EventEmitter
-
 var _ = require('lodash')
 
 class SelectHandle extends EventEmitter {

@@ -66,11 +66,31 @@ module.exports = exports = {
 				FROM information_schema.views
 				WHERE table_name = $1`, [ viewName ])
 
+		var isUpdatable = isUpdatableResult.rows[0].is_updatable === 'YES'
+
 		await exports.performQuery(client, `DROP VIEW ${viewName}`)
 
+		var tablesUsed = tablesResult.rows.map(row => row.table_name)
+
+		var primaryKeys = null
+		// Reading the primary keys only necessary if simple query on one table
+		if(isUpdatable === true) {
+			let primaryKeysResult = await exports.performQuery(client,
+				`SELECT a.attname
+					FROM pg_index i
+					JOIN pg_attribute a
+						ON a.attrelid = i.indrelid
+							AND a.attnum = ANY(i.indkey)
+					WHERE i.indrelid = $1::regclass
+						AND i.indisprimary`, [ tablesUsed[0] ])
+
+			primaryKeys = primaryKeysResult.rows.map(row => row.attname)
+		}
+
 		return {
-			isUpdatable: isUpdatableResult.rows[0].is_updatable === 'YES',
-			tablesUsed: tablesResult.rows.map(row => row.table_name)
+			isUpdatable,
+			tablesUsed,
+			primaryKeys
 		}
 	},
 

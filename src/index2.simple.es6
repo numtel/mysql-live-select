@@ -6,6 +6,8 @@ const CHANNEL = 'ben_test'
 
 var liveDb = new LiveSQL(CONN_STR, CHANNEL)
 
+liveDb.on('error', err => console.error(err.stack))
+
 liveDb.select(`
 	SELECT
 		*
