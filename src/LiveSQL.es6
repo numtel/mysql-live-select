@@ -15,18 +15,13 @@ var SelectHandle = require('./SelectHandle')
  *  repeatedly executing the query on each change
  * TODO Notification payload pagination at 8000 bytes
  */
-const ENABLE_SIMPLE_QUERIES = true
+const ENABLE_SIMPLE_QUERIES = false
 
 /*
- * Calculate the duration between refreshing result sets
- * As the rate increases, the duration increases to compensate for the time
- *  needed to run the queries
- * TODO Could this be estimated differently?
- *  -> Why not wait for current batch to finish, the grab new batch?
- * @param Integer rate Number of queries to refresh per second
- * @return Integer Timeout duration (ms)
+ * Duration (ms) to wait to check for new updates when no updates are
+ *  available in current frame
  */
-var calcInterval = (rate) => 100 + (45 * rate)
+const STAGNANT_TIMEOUT = 100
 
 class LiveSQL extends EventEmitter {
 	constructor(connStr, channel) {
@@ -95,19 +90,22 @@ class LiveSQL extends EventEmitter {
 
 		// Initialize neverending loop to refresh active result sets
 		var performNextUpdate = () => {
-			let queriesToUpdate =
-				_.uniq(this.waitingToUpdate.splice(0, this.waitingToUpdate.length))
+			if(this.waitingToUpdate.length !== 0) {
+				let queriesToUpdate =
+					_.uniq(this.waitingToUpdate.splice(0, this.waitingToUpdate.length))
 
-			// XXX this.refreshCount is only used for debugging the load test
-			this.refreshCount += queriesToUpdate.length
+				// XXX this.refreshCount is only used for debugging the load test
+				this.refreshCount += queriesToUpdate.length
 
-			this.refreshRate.inc(queriesToUpdate.length)
+				this.refreshRate.inc(queriesToUpdate.length)
 
-			for(let queryHash of queriesToUpdate) {
-				this._updateQuery(queryHash)
+				Promise.all(queriesToUpdate.map(queryHash =>
+					this._updateQuery(queryHash))).then(performNextUpdate)
 			}
-
-			setTimeout(performNextUpdate, calcInterval(this.refreshRate.rate))
+			else {
+				// No queries to update, wait for set duration
+				setTimeout(performNextUpdate, STAGNANT_TIMEOUT)
+			}
 		}.bind(this)
 		performNextUpdate()
 	}
