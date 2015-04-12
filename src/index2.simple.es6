@@ -1,10 +1,10 @@
 var util = require('util')
-var LiveSQL = require('./LiveSQL')
+var LivePG = require('./LivePG')
 
 const CONN_STR = 'postgres://meteor:meteor@127.0.0.1/meteor'
 const CHANNEL = 'ben_test'
 
-var liveDb = new LiveSQL(CONN_STR, CHANNEL)
+var liveDb = new LivePG(CONN_STR, CHANNEL)
 
 liveDb.on('error', err => console.error(err.stack))
 

@@ -19,8 +19,8 @@ class SelectHandle extends EventEmitter {
 				delete parent.selectBuffer[queryHash]
 				_.pull(parent.waitingToUpdate, queryHash)
 
-				for(let table of Object.keys(parent.tablesUsed)) {
-					_.pull(parent.tablesUsed[table], queryHash)
+				for(let table of Object.keys(parent.allTablesUsed)) {
+					_.pull(parent.allTablesUsed[table], queryHash)
 				}
 			}
 		}

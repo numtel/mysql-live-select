@@ -2,7 +2,7 @@
 	"name"        : "pg-live-query",
 	"version"     : "0.0.3",
 	"description" : "LiveQuery implementation for PostgreSQL",
-	"main"        : "lib/LiveSQL.js",
+	"main"        : "lib/LivePG.js",
 	"license"     : "MIT",
 	"repository"  : "https://github.com/nothingisdead/pg-live-query.git",
 
@@ -37,8 +37,6 @@
 		"pg"             : "^4.2.0",
 		"lodash"         : "^3.1.0",
 		"murmurhash-js"  : "^1.0.0",
-		"random-strings" : "^0.0.1",
-		"sql-parser"     : "0.5.0",
-		"md5"            : "1.0.0"
+		"random-strings" : "^0.0.1"
 	}
 }

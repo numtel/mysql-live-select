@@ -81,10 +81,7 @@ var childPromise = new Promise((resolve, reject) => {
 					memoryUsage.push({
 						time: parseInt(data[1], 10),
 						memory: parseInt(data[2], 10),
-						memoryUsed: parseInt(data[3], 10),
-						refreshCount: parseInt(data[4], 10),
-						notifyCount: parseInt(data[5], 10),
-						refreshRate: parseInt(data[6], 10)
+						memoryUsed: parseInt(data[3], 10)
 					})
 					break
 				case 'NEXT_EVENT':
@@ -98,9 +95,6 @@ var childPromise = new Promise((resolve, reject) => {
 					var scoreIds = data[3].split(',').map(scoreDetails =>
 						scoreDetails.split('@').map(num => parseInt(num, 10)))
 					var responseTimes = null
-
-// 					classUpdates.length > selectCount &&
-// 						console.log('UPin', classId, eventTime, scoreIds)
 
 					if(waitingOps.length !== 0){
 						var myOps = waitingOps.filter(op =>
@@ -121,7 +115,7 @@ var childPromise = new Promise((resolve, reject) => {
 					if(classUpdates.length === selectCount) {
 						// childPromise is ready when all selects have initial data
 						console.timeEnd('Initialized each select instance')
-						// Wait for LiveSQL interval to come around, just in case...
+						// Wait for LivePG interval to come around, just in case...
 						setTimeout(() => resolve(child), 200)
 					}
 					break
@@ -162,7 +156,6 @@ var performRandom = {
 				score: scoreRow.score,
 				time: Date.now()
 			})
-// 	 		console.log('UPDATING', scoreRow.id, classId)
 
 			client.query(
 				'UPDATE scores SET score = score + 1 WHERE id = $1', [ scoreRow.id ])
@@ -187,7 +180,6 @@ var performRandom = {
 				score: 5,
 				time: Date.now()
 			})
-// 	 		console.log('INSERTING', scoreId, classId, assignId)
 
 			fixtureData.scores.push({
 				id: scoreId,
@@ -292,40 +284,6 @@ process.on('SIGINT', () => {
 
 		console.log(babar(memory2Prep, {
 			caption: 'Memory Usage (Heap Used) by Elapsed Time (Megabytes / Seconds)'
-		}))
-
-		// Print refreshes count over elapsed time graph
-		if(memoryUsage[memoryUsage.length - 1].refreshCount !== 0) {
-			var refreshPrep = memoryUsage.map(evt => [
-				(evt.time - firstMemTime) / 1000,
-				evt.refreshCount
-			])
-
-			console.log(babar(refreshPrep, {
-				caption: 'Refresh Count over Elapsed Time'
-			}))
-		}
-
-		// Print notifies count over elapsed time graph
-		if(memoryUsage[memoryUsage.length - 1].notifyCount !== 0) {
-			var notifyPrep = memoryUsage.map(evt => [
-				(evt.time - firstMemTime) / 1000,
-				evt.notifyCount
-			])
-
-			console.log(babar(notifyPrep, {
-				caption: 'Notification Count over Elapsed Time'
-			}))
-		}
-
-		// Print refresh rate at elapsed time graph
-		var refreshRatePrep = memoryUsage.map(evt => [
-			(evt.time - firstMemTime) / 1000,
-			evt.refreshRate
-		])
-
-		console.log(babar(refreshRatePrep, {
-			caption: 'Refresh Rate at Elapsed Time'
 		}))
 	}
 

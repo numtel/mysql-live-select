@@ -68,14 +68,6 @@ exports.variousQueries = function(test) {
 											orderByIndex(updateLog[nextLogPos][eventType]), data,
 											`${caseId} Difference on event #${nextLogPos}`)
 
-										// Also, check expectSimple flag now that parsed query
-										//  will be ready
-										if(details.expectSimple) {
-											test.ok(
-												select.parent.selectBuffer[select.queryHash].parsed
-													!== null, `${caseId} query Should be simple`)
-										}
-
 										// Move to next event
 										processEvents(callback, index + 1)
 									}

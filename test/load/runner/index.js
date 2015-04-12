@@ -38,10 +38,7 @@ setInterval(function() {
 		'MEMORY_USAGE',
 		Date.now(),
 		mem.heapTotal,
-		mem.heapUsed,
-		global.liveDb ? global.liveDb.refreshCount : '0',
-		global.liveDb ? global.liveDb.notifyCount : '0',
-		global.liveDb ? global.liveDb.refreshRate.rate : '0'
+		mem.heapUsed
 	].join(' '))
 }, 500)
 

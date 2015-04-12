@@ -1,8 +1,8 @@
 var _ = require('lodash')
-var LiveSQL = require('../../../')
+var LivePG = require('../../../')
 var common = require('../../../src/common')
 
-var liveDb = global.liveDb = new LiveSQL(options.conn, options.channel)
+var liveDb = global.liveDb = new LivePG(options.conn, options.channel)
 
 liveDb.on('error', function(error) {
 	console.error(error)

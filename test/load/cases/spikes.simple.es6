@@ -9,7 +9,7 @@ module.exports = {
 		studentsPerClass: 20,
 		classesPerStudent: 6
 	},
-	customRunner: 'LiveSQL.select.simple',
+	customRunner: 'LivePG.select.simple',
 	// Set a value lower than classCount to not have a LiveSelect for each class
 	maxSelects: 50,
 	// TODO multiplier may cause issues at this point!
