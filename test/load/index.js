@@ -12,9 +12,9 @@ var parseArgs = require('minimist')
 var args = parseArgs(process.argv.slice(2))
 
 var defaults = {
-	conn    : 'postgres://meteor:meteor@127.0.0.1/meteor_test',
-	channel : 'load_test',
-	case    : 'static'
+	conn: 'postgres://meteor:meteor@127.0.0.1/meteor_test',
+	channel: 'load_test',
+	case: 'static'
 }
 
 if(args.help === true){
@@ -40,5 +40,10 @@ else {
 	global.settings = require('./cases/' + options.case)
 
 	// Setup in ES6 file
-	require('./setup')
+	if(options.case === 'interactive') {
+		require('./setup-interactive')
+	}
+	else {
+		require('./setup')
+	}
 }
