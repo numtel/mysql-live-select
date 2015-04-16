@@ -7,38 +7,38 @@ global.settings = JSON.parse(process.argv[3])
 var runner = require('./' + settings.customRunner)
 
 if(typeof runner === 'function') {
-	// Unit tests will export an async function that can be run over and over
+  // Unit tests will export an async function that can be run over and over
 
-	// Milliseconds to wait between finishing one operation and starting next
-	var SLEEP_DURATION = 10
+  // Milliseconds to wait between finishing one operation and starting next
+  var SLEEP_DURATION = 10
 
-	var runAgain = function() {
-		process.stdout.write(['NEXT_EVENT', Date.now()].join(' '))
-		performOperationForever()
-	}
+  var runAgain = function() {
+    process.stdout.write(['NEXT_EVENT', Date.now()].join(' '))
+    performOperationForever()
+  }
 
-	var runAfterTimeout = function() {
-		setTimeout(runAgain, SLEEP_DURATION)
-	}
+  var runAfterTimeout = function() {
+    setTimeout(runAgain, SLEEP_DURATION)
+  }
 
-	var runnerError = function(reason) {
-		console.error('Operation Failed', reason.stack)
-	}
+  var runnerError = function(reason) {
+    console.error('Operation Failed', reason.stack)
+  }
 
-	var performOperationForever = function() {
-		runner().then(runAfterTimeout, runnerError)
-	}
+  var performOperationForever = function() {
+    runner().then(runAfterTimeout, runnerError)
+  }
 
-	_.range(settings.clientCount || 1).map(performOperationForever)
+  _.range(settings.clientCount || 1).map(performOperationForever)
 }
 
 setInterval(function() {
-	var mem = process.memoryUsage()
-	process.stdout.write([
-		'MEMORY_USAGE',
-		Date.now(),
-		mem.heapTotal,
-		mem.heapUsed
-	].join(' '))
+  var mem = process.memoryUsage()
+  process.stdout.write([
+    'MEMORY_USAGE',
+    Date.now(),
+    mem.heapTotal,
+    mem.heapUsed
+  ].join(' '))
 }, 500)
 

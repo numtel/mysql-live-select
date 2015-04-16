@@ -9,18 +9,18 @@ var liveDb = new LivePG(CONN_STR, CHANNEL)
 liveDb.on('error', err => console.error(err.stack))
 
 liveDb.select(`
-	SELECT
-		*
-	FROM
-		scores
-	ORDER BY
-		score DESC
+  SELECT
+    *
+  FROM
+    scores
+  ORDER BY
+    score DESC
 `).on('update', (diff, rows) => {
-	console.log(util.inspect(diff, { depth: null }), rows)
+  console.log(util.inspect(diff, { depth: null }), rows)
 })
 
 // Ctrl+C
 process.on('SIGINT', () => {
-	liveDb.cleanup().then(process.exit)
+  liveDb.cleanup().then(process.exit)
 })
 

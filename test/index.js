@@ -2,11 +2,11 @@
  * Test Intialization
  */
 if(!('CONN' in process.env))
-	throw new Error(
-		'CONN environment variable required! (database connection string)')
+  throw new Error(
+    'CONN environment variable required! (database connection string)')
 if(!('CHANNEL' in process.env))
-	throw new Error(
-		'CHANNEL environment variable required! (notification identifier string)')
+  throw new Error(
+    'CHANNEL environment variable required! (notification identifier string)')
 
 // Global flags
 global.printDebug = process.env.DEBUG === '1'
@@ -23,16 +23,16 @@ var LivePG = require('../')
 global.liveDb   = new LivePG(process.env.CONN, process.env.CHANNEL)
 
 if(isLoadTest) {
-	module.exports = _.assign(
-		require('./helpers/lifecycle'),
-		require('./scoresLoad')
-	)
+  module.exports = _.assign(
+    require('./helpers/lifecycle'),
+    require('./scoresLoad')
+  )
 }
 else{
-	// Load full test suite
-	module.exports = _.assign(
-		require('./helpers/lifecycle'),
-		require('./scoresLoad'), // Optional CLASS_COUNT env variable, default 1
-		require('./variousQueries')
-	)
+  // Load full test suite
+  module.exports = _.assign(
+    require('./helpers/lifecycle'),
+    require('./scoresLoad'), // Optional CLASS_COUNT env variable, default 1
+    require('./variousQueries')
+  )
 }

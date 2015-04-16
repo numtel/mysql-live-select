@@ -1,42 +1,42 @@
 {
-	"name"        : "pg-live-select",
-	"version"     : "0.0.6",
-	"description" : "Live updating PostgreSQL SELECT statements",
-	"main"        : "lib/LivePG.js",
-	"license"     : "MIT",
-	"repository"  : "https://github.com/numtel/pg-live-select.git",
+  "name"        : "pg-live-select",
+  "version"     : "0.0.6",
+  "description" : "Live updating PostgreSQL SELECT statements",
+  "main"        : "lib/LivePG.js",
+  "license"     : "MIT",
+  "repository"  : "https://github.com/numtel/pg-live-select.git",
 
-	"contributors" : [
-		"numtel <ben@latenightsketches.com>",
-		"nothingisdead <rbmyr8@gmail.com>"
-	],
-	"engines": {
-		"node": "0.10"
-	},
-	"directories": {
-		"test": "test"
-	},
-	"scripts": {
-		"make" : "babel src --optional runtime --playground --out-dir lib",
-		"test" : "CONN=\"postgres://meteor:meteor@127.0.0.1/meteor_test\" CHANNEL=\"package_test\" DEBUG=0 STATS=1 nodeunit test/index.js"
-	},
-	"keywords": [
-		"postgresql",
-		"notify"
-	],
-	"devDependencies": {
-		"babel"             : "^4.7.12",
-		"nodeunit"          : "~0.9.0",
-		"minimist"          : "^1.1.0",
-		"babar"             : "0.0.3",
-		"simple-statistics" : "0.9.0",
-		"console.table"     : "0.4.0"
-	},
-	"dependencies": {
-		"babel-runtime"  : "^4.7.12",
-		"pg"             : "^4.3.0",
-		"lodash"         : "^3.1.0",
-		"murmurhash-js"  : "^1.0.0",
-		"random-strings" : "^0.0.1"
-	}
+  "contributors" : [
+    "numtel <ben@latenightsketches.com>",
+    "nothingisdead <rbmyr8@gmail.com>"
+  ],
+  "engines": {
+    "node": "0.10"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "make" : "babel src --optional runtime --playground --out-dir lib",
+    "test" : "CONN=\"postgres://meteor:meteor@127.0.0.1/meteor_test\" CHANNEL=\"package_test\" DEBUG=0 STATS=1 nodeunit test/index.js"
+  },
+  "keywords": [
+    "postgresql",
+    "notify"
+  ],
+  "devDependencies": {
+    "babel"             : "^4.7.12",
+    "nodeunit"          : "~0.9.0",
+    "minimist"          : "^1.1.0",
+    "babar"             : "0.0.3",
+    "simple-statistics" : "0.9.0",
+    "console.table"     : "0.4.0"
+  },
+  "dependencies": {
+    "babel-runtime"  : "^4.7.12",
+    "pg"             : "^4.3.0",
+    "lodash"         : "^3.1.0",
+    "murmurhash-js"  : "^1.0.0",
+    "random-strings" : "^0.0.1"
+  }
 }

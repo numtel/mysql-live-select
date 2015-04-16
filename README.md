@@ -31,18 +31,18 @@ var liveDb = new LivePG('postgres://user:pass@host/db', 'myapp');
 
 // Create a live query
 var highScores = liveDb
-	.select('SELECT * FROM scores WHERE score > 10')
-	.on('update', function(diff, data) {
-		// diff: object containing differences since last update
-		// data: array of full result set
-	});
+  .select('SELECT * FROM scores WHERE score > 10')
+  .on('update', function(diff, data) {
+    // diff: object containing differences since last update
+    // data: array of full result set
+  });
 
 // Stop query updates
 highScores.stop();
 
 // When exiting the application, remove all installed triggers
 liveDb.cleanup().then(function() {
-	// Database is now cleaned
+  // Database is now cleaned
 });
 ```
 
@@ -71,9 +71,9 @@ The `triggers` argument object contains table names as the object's keys and res
 ```javascript
 // Simple live query with custom trigger
 liveDb.select('SELECT * FROM scores WHERE score > $1', [ 10 ], {
-	'scores': function(row) {
-		return row.score > 10
-	}
+  'scores': function(row) {
+    return row.score > 10
+  }
 })
 ```
 
