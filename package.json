@@ -1,10 +1,10 @@
 {
-	"name"        : "pg-live-query",
-	"version"     : "0.0.3",
-	"description" : "LiveQuery implementation for PostgreSQL",
+	"name"        : "pg-live-select",
+	"version"     : "0.0.5",
+	"description" : "Live updating PostgreSQL SELECT statements",
 	"main"        : "lib/LivePG.js",
 	"license"     : "MIT",
-	"repository"  : "https://github.com/nothingisdead/pg-live-query.git",
+	"repository"  : "https://github.com/numtel/pg-live-select.git",
 
 	"contributors" : [
 		"numtel <ben@latenightsketches.com>",

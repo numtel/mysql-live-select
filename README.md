@@ -1,4 +1,4 @@
-# pg-live-query
+# pg-live-select
 
 NPM Package to provide events when a PostgreSQL `SELECT` statement result set changes.
 
@@ -9,7 +9,7 @@ Built using [node-postgres NPM package](https://github.com/brianc/node-postgres)
 ## Installation
 
 ```
-npm install pg-live-query
+npm install pg-live-select
 ```
 
 ## LivePG Class
@@ -25,7 +25,7 @@ A single persistent client is used to listen for notifications. Result set refre
 
 ```javascript
 // Instantiate LivePG class
-var LivePG = require('pg-live-query');
+var LivePG = require('pg-live-select');
 
 var liveDb = new LivePG('postgres://user:pass@host/db', 'myapp');
 
@@ -97,7 +97,7 @@ The `SelectHandle` class inherits from `EventEmitter`, providing an `update` eve
 
 Regression tests are performed using the `npm test` command.
 
-Please see the [Performing Tests wiki page](https://github.coma/nothingisdead/pg-live-query/wiki/Performing-Tests) for information about the load tests.
+Please see the [Performing Tests wiki page](https://github.com/numtel/pg-live-query/wiki/Performing-Tests) for information about the load tests.
 
 ## License
 
