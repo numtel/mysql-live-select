@@ -1,6 +1,6 @@
 {
 	"name"        : "pg-live-select",
-	"version"     : "0.0.5",
+	"version"     : "0.0.6",
 	"description" : "Live updating PostgreSQL SELECT statements",
 	"main"        : "lib/LivePG.js",
 	"license"     : "MIT",
@@ -34,7 +34,7 @@
 	},
 	"dependencies": {
 		"babel-runtime"  : "^4.7.12",
-		"pg"             : "^4.2.0",
+		"pg"             : "^4.3.0",
 		"lodash"         : "^3.1.0",
 		"murmurhash-js"  : "^1.0.0",
 		"random-strings" : "^0.0.1"
