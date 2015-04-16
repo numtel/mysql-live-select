@@ -25,10 +25,6 @@ class LivePG extends EventEmitter {
     this.ready.catch(this._error)
   }
 
-  _error(reason) {
-    this.emit('error', reason)
-  }
-
   async init() {
     this.notifyHandle = await common.getClient(this.connStr)
 
@@ -199,6 +195,10 @@ class LivePG extends EventEmitter {
     }
 
     pgHandle.done()
+  }
+
+  _error(reason) {
+    this.emit('error', reason)
   }
 }
 

@@ -199,19 +199,19 @@ module.exports = exports = {
     // Deallocate first to ensure no overwrites
     diff.moved !== null && diff.moved.forEach(moved => {
       newResults[moved.old_index - 1] = undefined
-    });
+    })
 
     diff.copied !== null && diff.copied.forEach(copied => {
       var copyRow = _.clone(data[copied.orig_index - 1])
       copyRow._index = copied.new_index
       newResults[copied.new_index - 1] = copyRow
-    });
+    })
 
     diff.moved !== null && diff.moved.forEach(moved => {
       var movingRow = data[moved.old_index - 1]
       movingRow._index = moved.new_index
       newResults[moved.new_index - 1] = movingRow
-    });
+    })
 
     diff.added !== null && diff.added
       .forEach(added => newResults[added._index - 1] = added)
