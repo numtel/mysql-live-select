@@ -22,13 +22,18 @@ class LivePG extends EventEmitter {
 		this.tablesUsedCache = {}
 
 		this.ready = this.init()
+		this.ready.catch(this._error)
+	}
+
+	_error(reason) {
+		this.emit('error', reason)
 	}
 
 	async init() {
 		this.notifyHandle = await common.getClient(this.connStr)
 
-		await common.performQuery(this.notifyHandle.client,
-			`LISTEN "${this.channel}"`)
+		common.performQuery(this.notifyHandle.client, `LISTEN "${this.channel}"`)
+			.catch(this._error)
 
 		this.notifyHandle.client.on('notification', info => {
 			if(info.channel === this.channel) {
@@ -36,7 +41,7 @@ class LivePG extends EventEmitter {
 					// See common.createTableTrigger() for payload definition
 					var payload = JSON.parse(info.payload)
 				} catch(error) {
-					return this.emit('error',
+					return this._error(
 						new Error('INVALID_NOTIFICATION ' + info.payload))
 				}
 
@@ -66,7 +71,7 @@ class LivePG extends EventEmitter {
 		})
 
 		// Initialize neverending loop to refresh active result sets
-		var performNextUpdate = () => {
+		var performNextUpdate = function() {
 			if(this.waitingToUpdate.length !== 0) {
 				let queriesToUpdate =
 					_.uniq(this.waitingToUpdate.splice(0, this.waitingToUpdate.length))
@@ -74,7 +79,7 @@ class LivePG extends EventEmitter {
 				Promise.all(
 					queriesToUpdate.map(queryHash => this._updateQuery(queryHash)))
 					.then(performNextUpdate)
-					.catch(reason => this.emit('error', reason))
+					.catch(this._error)
 			}
 			else {
 				// No queries to update, wait for set duration
@@ -104,7 +109,7 @@ class LivePG extends EventEmitter {
 
 		// Perform initialization asynchronously
 		this._initSelect(query, params, triggers, queryHash, handle)
-			.catch(reason => this.emit('error', reason))
+			.catch(this._error)
 
 		return handle
 	}
