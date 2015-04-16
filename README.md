@@ -6,6 +6,11 @@ Built using [node-postgres NPM package](https://github.com/brianc/node-postgres)
 
 **Postgres 9.3+ is required.**
 
+*See also:*
+
+* [Meteor Package for Reactive PostgreSQL](https://github.com/numtel/meteor-pg)
+* [`mysql-live-select` NPM Package](https://github.com/numtel/mysql-live-select)
+
 ## Installation
 
 ```
