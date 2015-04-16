@@ -3,6 +3,12 @@ var _ = require('lodash')
 var randomString  = require('random-strings')
 var querySequence = require('../helpers/querySequence')
 
+var indexes = {
+  students: [ ],
+  assignments: [ 'class_id' ],
+  scores: [ 'id ASC', 'score DESC', 'assignment_id', 'student_id' ]
+}
+
 /**
  * Generate data structure describing a random scores set
  * @param Integer classCount        total number of classes to generate
@@ -85,6 +91,16 @@ exports.install = function(generation) {
           `(${_.map(row, () => '$' + ++valueCount).join(', ')})`).join(', ')}`,
        _.flatten(rowShard.map(row => _.values(row))) ]
     }))
+
+    // Related: test/variousQueries.es6 :: applyTableSuffixes
+    // Suffixes allow concurrent test running
+    var tablePrefix = table.split('_')[0]
+
+    if(indexes[tablePrefix] && indexes[tablePrefix].length !== 0) {
+      for(let index of indexes[tablePrefix]) {
+        installQueries.push(`CREATE INDEX ON ${table} (${index})`)
+      }
+    }
 
     installQueries.push(`ANALYZE ${table}`)
 
