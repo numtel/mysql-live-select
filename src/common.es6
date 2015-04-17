@@ -97,7 +97,12 @@ module.exports = exports = {
     await exports.performQuery(client,
       `CREATE OR REPLACE FUNCTION ${triggerName}() RETURNS trigger AS $$
         DECLARE
-          row_data RECORD;
+          row_data   RECORD;
+          full_msg   TEXT;
+          full_len   INT;
+          cur_page   INT;
+          page_count INT;
+          msg_hash   TEXT;
         BEGIN
           IF (TG_OP = 'INSERT') THEN
             ${payloadNew}
@@ -106,7 +111,18 @@ module.exports = exports = {
           ELSIF (TG_OP = 'UPDATE') THEN
             ${payloadChanged}
           END IF;
-          PERFORM pg_notify('${channel}', row_to_json(row_data)::TEXT);
+
+          SELECT row_to_json(row_data)::TEXT INTO full_msg;
+          SELECT char_length(full_msg)       INTO full_len;
+          SELECT (full_len / 7950) + 1       INTO page_count;
+          SELECT md5(full_msg)               INTO msg_hash;
+
+          FOR cur_page IN 1..page_count LOOP
+            PERFORM pg_notify('${channel}',
+              msg_hash || ':' || page_count || ':' || cur_page || ':' ||
+              substr(full_msg, ((cur_page - 1) * 7950) + 1, 7950)
+            );
+          END LOOP;
           RETURN NULL;
         END;
       $$ LANGUAGE plpgsql`)

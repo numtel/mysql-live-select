@@ -2,8 +2,10 @@
  * Describe cases against data to fed into fixtures/scoresLoad.es6 :: install()
  */
 var _ = require('lodash')
+var randomString  = require('random-strings')
 
 const UNCHANGED_WAIT = 300
+const BIG_PAYLOAD_LENGTH = 50000
 
 exports.data = {
   assignments: [
@@ -12,6 +14,7 @@ exports.data = {
     { id:3, class_id:1, name: 'Assignment 3', value:57 }
   ],
   students: [
+    // All student names must be same string length for bigPayload test
     { id:1, name: 'Student 1' },
     { id:2, name: 'Student 2' },
     { id:3, name: 'Student 3' }
@@ -20,6 +23,9 @@ exports.data = {
     { id:1, assignment_id:1, student_id:1, score:52 },
     { id:2, assignment_id:1, student_id:2, score:54 },
     { id:3, assignment_id:1, student_id:3, score:28 },
+  ],
+  big_payload: [
+    { id:1, big_name: 'Initial' }
   ]
 }
 
@@ -35,6 +41,7 @@ exports.cases = {}
       { diff: <deepEqual to most recent update event diff> }
       { perform: [<array of SQL queries>] }
       { unchanged: <milliseconds to wait> }
+      { stop: true }
     ]
   }
  */
@@ -539,3 +546,14 @@ exports.cases.stopped = {
   ]
 }
 
+let newName = randomString.alphaLower(BIG_PAYLOAD_LENGTH)
+exports.cases.bigPayload = {
+  query: `SELECT big_name FROM big_payload ORDER BY id ASC`,
+  events: [
+    { data: [ { big_name: 'Initial', _index: 1 } ] },
+    { perform: [
+      `UPDATE big_payload SET big_name = '${newName}'`
+    ] },
+    { data: [ { big_name: newName, _index: 1 } ] },
+  ]
+}

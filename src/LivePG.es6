@@ -20,25 +20,33 @@ class LivePG extends EventEmitter {
     this.selectBuffer    = {}
     this.allTablesUsed   = {}
     this.tablesUsedCache = {}
+    this.waitingPayloads = {}
 
-    this.ready = this.init()
+    this.ready = this._init()
     this.ready.catch(this._error)
   }
 
-  async init() {
+  async _init() {
     this.notifyHandle = await common.getClient(this.connStr)
 
     common.performQuery(this.notifyHandle.client, `LISTEN "${this.channel}"`)
       .catch(this._error)
 
+    // Cache partial payloads in this closure
+
     this.notifyHandle.client.on('notification', info => {
       if(info.channel === this.channel) {
+        var payload = this._processNotification(info.payload)
+        if(payload === null) {
+          return // Full message has not arrived yet
+        }
+
         try {
           // See common.createTableTrigger() for payload definition
-          var payload = JSON.parse(info.payload)
+          var payload = JSON.parse(payload)
         } catch(error) {
           return this._error(
-            new Error('INVALID_NOTIFICATION ' + info.payload))
+            new Error('INVALID_NOTIFICATION ' + payload))
         }
 
         if(payload.table in this.allTablesUsed) {
@@ -108,6 +116,18 @@ class LivePG extends EventEmitter {
       .catch(this._error)
 
     return handle
+  }
+
+  async cleanup() {
+    this.notifyHandle.done()
+
+    let pgHandle = await common.getClient(this.connStr)
+
+    for(let table of Object.keys(this.allTablesUsed)) {
+      await common.dropTableTrigger(pgHandle.client, table, this.channel)
+    }
+
+    pgHandle.done()
   }
 
   async _initSelect(query, params, triggers, queryHash, handle) {
@@ -185,16 +205,42 @@ class LivePG extends EventEmitter {
     }
   }
 
-  async cleanup() {
-    this.notifyHandle.done()
+  _processNotification(payload) {
+    let argSep = []
 
-    let pgHandle = await common.getClient(this.connStr)
-
-    for(let table of Object.keys(this.allTablesUsed)) {
-      await common.dropTableTrigger(pgHandle.client, table, this.channel)
+    // Notification is 4 parts split by colons
+    while(argSep.length < 3) {
+      let lastPos = argSep.length !== 0 ? argSep[argSep.length - 1] + 1 : 0
+      argSep.push(payload.indexOf(':', lastPos))
     }
 
-    pgHandle.done()
+    let msgHash   = payload.slice(0, argSep[0])
+    let pageCount = payload.slice(argSep[0] + 1, argSep[1])
+    let curPage   = payload.slice(argSep[1] + 1, argSep[2])
+    let msgPart   = payload.slice(argSep[2] + 1, argSep[3])
+    let fullMsg
+
+    if(pageCount > 1) {
+      // Piece together multi-part messages
+      if(!(msgHash in this.waitingPayloads)) {
+        this.waitingPayloads[msgHash] = _.range(pageCount).map(i => null)
+      }
+      this.waitingPayloads[msgHash][curPage - 1] = msgPart
+
+      if(this.waitingPayloads[msgHash].indexOf(null) !== -1) {
+        return null // Must wait for full message
+      }
+
+      fullMsg = this.waitingPayloads[msgHash].join('')
+
+      delete this.waitingPayloads[msgHash]
+    }
+    else {
+      // Payload small enough to fit in single message
+      fullMsg = msgPart
+    }
+
+    return fullMsg
   }
 
   _error(reason) {

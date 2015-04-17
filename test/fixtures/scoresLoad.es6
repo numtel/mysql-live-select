@@ -1,6 +1,6 @@
 var _ = require('lodash')
-
 var randomString  = require('random-strings')
+
 var querySequence = require('../helpers/querySequence')
 
 var indexes = {
@@ -57,9 +57,10 @@ function(classCount, assignPerClass, studentsPerClass, classesPerStudent) {
 
 function columnTypeFromName(name) {
   switch(name){
-    case 'id'   : return 'serial NOT NULL'
-    case 'name' : return 'character varying(50) NOT NULL'
-    default     : return 'integer NOT NULL'
+    case 'id'       : return 'serial NOT NULL'
+    case 'name'     : return 'character varying(50) NOT NULL'
+    case 'big_name' : return 'text NOT NULL'
+    default         : return 'integer NOT NULL'
   }
 }
 
