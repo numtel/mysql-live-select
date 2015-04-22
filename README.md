@@ -1,4 +1,4 @@
-# mysql-live-select [![Build Status](https://travis-ci.org/numtel/mysql-live-select.svg)](https://travis-ci.org/numtel/mysql-live-select)
+# mysql-live-select [![Build Status](https://travis-ci.org/numtel/mysql-live-select.svg?branch=master)](https://travis-ci.org/numtel/mysql-live-select)
 
 NPM Package to provide events when a MySQL select statement result set changes.
 
