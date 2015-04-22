@@ -1,4 +1,6 @@
-# pg-live-select
+# mysql-live-select
+
+> **Under construction, converting from [`pg-live-select`](https://github.com/numtel/pg-live-select)**
 
 NPM Package to provide events when a PostgreSQL `SELECT` statement result set changes.
 
