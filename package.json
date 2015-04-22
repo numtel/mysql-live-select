@@ -1,10 +1,10 @@
 {
-  "name"        : "pg-live-select",
-  "version"     : "0.0.7",
-  "description" : "Live updating PostgreSQL SELECT statements",
-  "main"        : "lib/LivePG.js",
+  "name"        : "mysql-live-select",
+  "version"     : "1.0.0",
+  "description" : "Live updating MySQL SELECT statements",
+  "main"        : "lib/LiveMysql.js",
   "license"     : "MIT",
-  "repository"  : "https://github.com/numtel/pg-live-select.git",
+  "repository"  : "https://github.com/numtel/mysql-live-select.git",
 
   "contributors" : [
     "numtel <ben@latenightsketches.com>",
@@ -21,8 +21,12 @@
     "test" : "CONN=\"postgres://meteor:meteor@127.0.0.1/meteor_test\" CHANNEL=\"package_test\" DEBUG=0 STATS=1 nodeunit test/index.js"
   },
   "keywords": [
-    "postgresql",
-    "notify"
+    "mysql",
+    "live",
+    "select",
+    "continuous",
+    "query",
+    "binlog"
   ],
   "devDependencies": {
     "babel"             : "^4.7.12",
@@ -34,7 +38,8 @@
   },
   "dependencies": {
     "babel-runtime"  : "^4.7.12",
-    "pg"             : "^4.3.0",
+    "mysql"          : "^2.6.1",
+    "zongji"         : "^0.3.2",
     "lodash"         : "^3.1.0",
     "murmurhash-js"  : "^1.0.0",
     "random-strings" : "^0.0.1"

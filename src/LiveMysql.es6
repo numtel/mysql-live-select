@@ -11,16 +11,24 @@ var SelectHandle = require('./SelectHandle')
  */
 const STAGNANT_TIMEOUT = 100
 
-class LivePG extends EventEmitter {
-  constructor(connStr, channel) {
-    this.connStr         = connStr
-    this.channel         = channel
-    this.notifyHandle    = null
+class LiveMysql extends EventEmitter {
+  constructor(settings) {
+    this.settings = settings
+    this.zongji = null;
+    // Expose database connection to application
+    this.db = mysql.createConnection(settings);
     this.waitingToUpdate = []
     this.selectBuffer    = {}
     this.allTablesUsed   = {}
     this.tablesUsedCache = {}
     this.waitingPayloads = {}
+
+    this.zongjiSettings = {
+      serverId: settings.serverId,
+      startAtEnd: true,
+      includeEvents: [ 'tablemap', 'writerows', 'updaterows', 'deleterows' ],
+      includeSchema: {}
+    };
 
     this.ready = this._init()
     this.ready.catch(this._error)
