@@ -109,6 +109,18 @@ Argument Name | Description
 
 Return `true` when the row data meets the condition to update the result set.
 
+### LiveMysql.prototype.pause()
+
+Temporarily skip processing of updates from the binary log.
+
+### LiveMysql.prototype.resume()
+
+Begin processing updates after `pause()`. All active live select instances will be refreshed upon resume.
+
+### LiveMysql.prototype.end()
+
+Close connections and stop checking for updates.
+
 ## LiveMysqlSelect object
 
 Each call to the `select()` method on a LiveMysql object, returns a `LiveMysqlSelect` object with the following methods:

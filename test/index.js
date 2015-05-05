@@ -140,7 +140,44 @@ module.exports = {
       });
     });
   },
+  pauseAndResume: function(test){
+    var waitTime = 500;
+    var table = 'pause_resume';
+    server.on('ready', function(conn, esc, escId, queries){
+      querySequence(conn.db, [
+        'DROP TABLE IF EXISTS ' + escId(table),
+        'CREATE TABLE ' + escId(table) + ' (col INT UNSIGNED)',
+        'INSERT INTO ' + escId(table) + ' (col) VALUES (10)',
+      ], function(results){
+        var pauseTime = Date.now();
+        conn.select('SELECT * FROM ' + escId(table), [ {
+          table: table,
+          database: server.database
+        } ]).on('update', function(rows){
+          if(rows.length > 0 && rows[0].col === 10){
+            test.ok(true);
+            conn.pause();
+            setTimeout(function(){
+              conn.resume();
+            }, waitTime);
+          }else if(rows.length > 0 && rows[0].col === 15){
+            // Ensure that waiting occurred
+            test.ok(Date.now() - pauseTime > waitTime);
+            test.done();
+          }
+        });
+
+        querySequence(conn.db, [
+          'UPDATE ' + escId(table) +
+          ' SET `col` = 15'
+        ], function(results){
+          // ...
+        });
+      });
+    });
+  },
   stopAndActive: function(test){
+    // Must be last test that uses binlog updates since it calls stop()
     var table = 'stop_active';
     server.on('ready', function(conn, esc, escId, queries){
       querySequence(conn.db, [
