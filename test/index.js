@@ -140,6 +140,35 @@ module.exports = {
       });
     });
   },
+  emptyResults: function(test){
+    var waitTime = 500;
+    var table = 'empty_results';
+    server.on('ready', function(conn, esc, escId, queries){
+      querySequence(conn.db, [
+        'DROP TABLE IF EXISTS ' + escId(table),
+        'CREATE TABLE ' + escId(table) + ' (col INT UNSIGNED)',
+      ], function(results){
+        var pauseTime = Date.now();
+        conn.select('SELECT * FROM ' + escId(table), [ {
+          table: table,
+          database: server.database
+        } ]).on('update', function(rows){
+          if(rows.length === 0) {
+            // Initialized with no rows, so add one
+            querySequence(conn.db, [
+              'INSERT INTO ' + escId(table) + ' (col) VALUES (10)'
+            ], function(results){
+              // ...
+            });
+          }else if(rows.length > 0 && rows[0].col === 10){
+            // Row was added, all done
+            test.done();
+          }
+        });
+
+      });
+    });
+  },
   pauseAndResume: function(test){
     var waitTime = 500;
     var table = 'pause_resume';
