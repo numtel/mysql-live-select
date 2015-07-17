@@ -243,9 +243,12 @@ module.exports = {
     });
   },
   immediate_disconnection: function(test){
+    // Update serverId setting to prevent collision
+    settings.serverId++;
     var myTest = new LiveMysql(settings, function(error){
       myTest.end();
       test.ok(typeof error === 'undefined');
+      settings.serverId--;
       test.done();
     });
   },
