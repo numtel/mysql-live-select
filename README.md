@@ -147,9 +147,9 @@ Event Name | Arguments | Description
 
 ## Running Tests
 
-Tests must be run with a properly configured MySQL server. Configure test settings in `test/settings.mysql.js`.
+Tests must be run with a properly configured MySQL server. Configure test settings in `test/settings/mysql.js`.
 
-Execute `nodeunit` using the `npm test` command.
+Execute [Nodeunit](https://github.com/caolan/nodeunit) using the `npm test` command.
 
 ## License
 
