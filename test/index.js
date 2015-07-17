@@ -242,6 +242,13 @@ module.exports = {
       });
     });
   },
+  immediate_disconnection: function(test){
+    var myTest = new LiveMysql(settings, function(error){
+      myTest.end();
+      test.ok(typeof error === 'undefined');
+      test.done();
+    });
+  },
   error_invalid_connection: function(test){
     var myTest = new LiveMysql({
       host: '127.0.0.1',
