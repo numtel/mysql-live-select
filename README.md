@@ -100,12 +100,13 @@ Name | Type | Description
 
 #### Condition Function
 
-A condition function accepts one or two arguments:
+A condition function accepts up to three arguments:
 
 Argument Name | Description
 --------------|-----------------------------
 `row`         | Table row data
-`newRow`      | New row data (only available on `UPDATE` queries)
+`newRow`      | New row data (only available on `UPDATE` queries, `null` for others)
+`rowDeleted`  | Extra argument for aid in external caching: `true` on `DELETE`  queries, `false` on `INSERT`  queries, `null` on `UPDATE`  queries.
 
 Return `true` when the row data meets the condition to update the result set.
 

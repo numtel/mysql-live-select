@@ -23,12 +23,43 @@ module.exports = {
       querySequence(conn.db, [
         'DROP TABLE IF EXISTS ' + escId(table),
         'CREATE TABLE ' + escId(table) + ' (col INT UNSIGNED)',
-        'INSERT INTO ' + escId(table) + ' (col) VALUES (10)',
       ], function(results){
         queries.splice(0, queries.length);
 
         var query = 'SELECT * FROM ' + escId(table);
+        var conditionCheckIndex = 0;
         var triggers = [ {
+          database: server.database,
+          table: table,
+          condition: function(row, newRow, isDeleted) {
+            // Ensure that each call of this condition function receives
+            // the correct arguments
+            conditionCheckIndex++;
+            switch(conditionCheckIndex) {
+              case 1:
+                // Row has been inserted
+                test.equal(row.col, 10);
+                test.equal(newRow, null);
+                test.equal(isDeleted, false);
+                break;
+              case 2:
+                // Row has been updated
+                test.equal(row.col, 10);
+                test.equal(newRow.col, 15);
+                test.equal(isDeleted, null);
+                break;
+              case 3:
+                // Row has been deleted
+                test.equal(row.col, 15);
+                test.equal(newRow, null);
+                test.equal(isDeleted, true);
+                break;
+            }
+            return true;
+          }
+        } ];
+        // Second, resultsBuffer check query doesn't need the condition
+        var triggersSimple = [ {
           database: server.database,
           table: table
         } ];
@@ -37,12 +68,13 @@ module.exports = {
           // After initial update
           if(data.length > 0 && data[0].col === 10){
             // Second select instance to check resultsBuffer
-            conn.select(query, triggers).on('update', function(data){
+            conn.select(query, triggersSimple).on('update', function(data){
               if(data.length > 0 && data[0].col === 15){
                 // [1] Test in LiveMysqlSelect created later,
                 // Ensure only First select, update, second select occurred
+                // Along with the INSERT and UPDATE queries, 5 total
                 // i.e. No duplicate selects, resultsBuffer working
-                test.equal(queries.length, 3);
+                test.equal(queries.length, 5);
                 conn.db.query('DELETE FROM ' + escId(table));
               }
             }).on('added', function(row, index){
@@ -74,12 +106,6 @@ module.exports = {
               }
             });
 
-            querySequence(conn.db, [
-              'UPDATE ' + escId(table) +
-              ' SET `col` = 15'
-            ], function(results){
-              // ...
-            });
           }
         }).on('added', function(row, index){
           test.equal(index, 0);
@@ -92,6 +118,20 @@ module.exports = {
           test.equal(index, 0);
           test.equal(row.col, 15);
           test.done();
+        });
+
+        // Perform database operation sequence
+        querySequence(conn.db, [
+          'INSERT INTO ' + escId(table) + ' (col) VALUES (10)'
+        ], function(results){
+          // Wait before updating the row
+          setTimeout(function() {
+            querySequence(conn.db, [
+              'UPDATE ' + escId(table) + ' SET `col` = 15'
+            ], function(results){
+              // ...
+            });
+          }, 100);
         });
 
       });
