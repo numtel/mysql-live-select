@@ -254,7 +254,8 @@ module.exports = {
         'CREATE TABLE ' + escId(table) + ' (col INT UNSIGNED)',
         'INSERT INTO ' + escId(table) + ' (col) VALUES (10)',
       ], function(results){
-        conn.select('SELECT * FROM ' + escId(table), [ {
+        var query = 'SELECT * FROM ' + escId(table);
+        conn.select(query, [ {
           table: table,
           database: server.database
         } ]).on('update', function(rows){
@@ -263,6 +264,9 @@ module.exports = {
           }else if(rows.length > 0 && rows[0].col === 15){
             test.ok(this.active());
             this.stop();
+            // When all instances of query removed, resultsBuffer removed too
+            test.equal(typeof conn._resultsBuffer[query], 'undefined');
+
             test.ok(!this.active());
             conn.db.query('DELETE FROM ' + escId(table));
             setTimeout(function(){
