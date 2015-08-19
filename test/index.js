@@ -266,7 +266,7 @@ module.exports = {
             this.stop();
             // When all instances of query removed, resultsBuffer removed too
             // TODO: Update for queryCache
-            // test.equal(typeof conn._resultsBuffer[query], 'undefined');
+            test.equal(typeof conn._queryCache[query], 'undefined');
 
             test.ok(!this.active());
             conn.db.query('DELETE FROM ' + escId(table));
