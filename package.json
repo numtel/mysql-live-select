@@ -1,6 +1,6 @@
 {
   "name": "mysql-live-select",
-  "version": "0.0.23",
+  "version": "0.0.24",
   "description": "Live updating MySQL SELECT statements",
   "main": "lib/LiveMysql.js",
   "repository": "https://github.com/numtel/mysql-live-select",
@@ -17,7 +17,7 @@
   "author": "Ben Green <ben@latenightsketches.com> (http://github.com/numtel)",
   "license": "MIT",
   "dependencies": {
-    "mysql": "^2.6.1",
+    "mysql": "^2.8.0",
     "zongji": "^0.3.2"
   },
   "devDependencies": {
