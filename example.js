@@ -22,8 +22,16 @@ liveConnection.select(function(esc, escId){
   );
 }, [ {
   table: table,
-  condition: function(row, newRow){ return row.id === id; }
-} ]).on('update', function(data){
+  condition: function(row, newRow){
+    // Only refresh the results when the row matching the specified id is
+    // changed.
+    return row.id === id
+      // On UPDATE queries, newRow must be checked as well
+      || (newRow && newRow.id === id);
+  }
+} ]).on('update', function(diff, data){
+  // diff contains an object describing the difference since the previous update
+  // data contains an array of rows of the new result set
   console.log(data);
 });
 

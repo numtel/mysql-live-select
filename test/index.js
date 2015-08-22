@@ -64,11 +64,22 @@ module.exports = {
           table: table
         } ];
 
-        conn.select(query, triggers).on('update', function(data){
+        conn.select(query, triggers).on('update', function(diff, data) {
           // After initial update
           if(data.length > 0 && data[0].col === 10){
             // Second select instance to check resultsBuffer
-            conn.select(query, triggersSimple).on('update', function(data){
+            var secondInstanceInitialized = false;
+            conn.select(query, triggersSimple).on('update', function(diff, data) {
+              if(secondInstanceInitialized === false) {
+                // Check that the diff is correct when initializing from cache
+                test.deepEqual(diff,
+                  { removed: null,
+                    moved: null,
+                    copied: null,
+                    added: [ { col: 10, _index: 1 } ] });
+                secondInstanceInitialized = true;
+              }
+
               if(data.length > 0 && data[0].col === 15){
                 // [1] Test in LiveMysqlSelect created later,
                 // Ensure only First select, update, second select occurred
@@ -77,47 +88,47 @@ module.exports = {
                 test.equal(queries.length, 5);
                 conn.db.query('DELETE FROM ' + escId(table));
               }
-            }).on('added', function(row, index){
-              test.equal(index, 0);
-              test.equal(row.col, 10);
-            }).on('changed', function(row, newRow, index){
-              test.equal(index, 0);
-              test.equal(row.col, 10);
-              test.equal(newRow.col, 15);
-            }).on('removed', function(row, index){
-              test.equal(index, 0);
-              test.equal(row.col, 15);
-            }).on('diff', function(diff){
-              // Only one row will change at once
-              test.equal(diff.length, 1);
-              // Index will always be 0, the first item
-              test.equal(diff[0][diff[0].length - 1], 0);
-              switch(diff[0][0]){
-                case 'added':
-                  test.equal(diff[0][1].col, 10);
-                  break;
-                case 'changed':
-                  test.equal(diff[0][1].col, 10);
-                  test.equal(diff[0][2].col, 15);
-                  break;
-                case 'added':
-                  test.equal(diff[0][1].col, 15);
-                  break;
-              }
             });
-
           }
-        }).on('added', function(row, index){
-          test.equal(index, 0);
-          test.equal(row.col, 10);
-        }).on('changed', function(row, newRow, index){
-          test.equal(index, 0);
-          test.equal(row.col, 10);
-          test.equal(newRow.col, 15);
-        }).on('removed', function(row, index){
-          test.equal(index, 0);
-          test.equal(row.col, 15);
-          test.done();
+
+          switch(conditionCheckIndex) {
+            case 0:
+              // Initialized as empty
+              test.equal(data.length, 0);
+              test.deepEqual(diff,
+                { removed: null, moved: null, copied: null, added: [] });
+              break;
+            case 1:
+              // Row has been inserted
+              test.equal(data[0].col, 10);
+              test.equal(data.length, 1);
+              test.deepEqual(diff,
+                 { removed: null,
+                   moved: null,
+                   copied: null,
+                   added: [ { col: 10, _index: 1 } ] });
+              break;
+            case 2:
+              // Row has been updated
+              test.equal(data[0].col, 15);
+              test.equal(data.length, 1);
+              test.deepEqual(diff,
+                 { removed: [ { _index: 1 } ],
+                   moved: null,
+                   copied: null,
+                   added: [ { col: 15, _index: 1 } ] });
+              break;
+            case 3:
+              // Row has been deleted
+              test.equal(data.length, 0);
+              test.deepEqual(diff,
+                 { removed: [ { _index: 1 } ],
+                   moved: null,
+                   copied: null,
+                   added: null });
+              test.done();
+              break;
+          }
         });
 
         // Perform database operation sequence
@@ -137,78 +148,6 @@ module.exports = {
       });
     });
   },
-  skipDiff: function(test){
-    var table = 'skip_diff';
-    server.on('ready', function(conn, esc, escId, queries){
-      querySequence(conn.db, [
-        'DROP TABLE IF EXISTS ' + escId(table),
-        'CREATE TABLE ' + escId(table) + ' (col INT UNSIGNED)',
-        'INSERT INTO ' + escId(table) + ' (col) VALUES (10)',
-      ], function(results){
-        var error = function(){
-          throw new Error('diff events should not be called');
-        };
-
-        conn.settings.skipDiff = true;
-        conn.select('SELECT * FROM ' + escId(table), [ {
-          table: table,
-          database: server.database
-        } ]).on('update', function(rows){
-          if(rows.length > 0 && rows[0].col === 10){
-            test.ok(true);
-          }else if(rows.length > 0 && rows[0].col === 15){
-            conn.db.query('DELETE FROM ' + escId(table));
-          }else if(rows.length === 0){
-            // Give time, just in case the `removed` event comes in
-            setTimeout(function(){
-              conn.settings.skipDiff = false;
-              test.done();
-            }, 100);
-          }
-        })
-        .on('added', error)
-        .on('changed', error)
-        .on('removed', error)
-        .on('diff', error);
-
-        querySequence(conn.db, [
-          'UPDATE ' + escId(table) +
-          ' SET `col` = 15'
-        ], function(results){
-          // ...
-        });
-      });
-    });
-  },
-  emptyResults: function(test){
-    var waitTime = 500;
-    var table = 'empty_results';
-    server.on('ready', function(conn, esc, escId, queries){
-      querySequence(conn.db, [
-        'DROP TABLE IF EXISTS ' + escId(table),
-        'CREATE TABLE ' + escId(table) + ' (col INT UNSIGNED)',
-      ], function(results){
-        var pauseTime = Date.now();
-        conn.select('SELECT * FROM ' + escId(table), [ {
-          table: table,
-          database: server.database
-        } ]).on('update', function(rows){
-          if(rows.length === 0) {
-            // Initialized with no rows, so add one
-            querySequence(conn.db, [
-              'INSERT INTO ' + escId(table) + ' (col) VALUES (10)'
-            ], function(results){
-              // ...
-            });
-          }else if(rows.length > 0 && rows[0].col === 10){
-            // Row was added, all done
-            test.done();
-          }
-        });
-
-      });
-    });
-  },
   pauseAndResume: function(test){
     var waitTime = 500;
     var table = 'pause_resume';
@@ -222,7 +161,7 @@ module.exports = {
         conn.select('SELECT * FROM ' + escId(table), [ {
           table: table,
           database: server.database
-        } ]).on('update', function(rows){
+        } ]).on('update', function(diff, rows){
           if(rows.length > 0 && rows[0].col === 10){
             test.ok(true);
             conn.pause();
@@ -245,10 +184,10 @@ module.exports = {
       });
     });
   },
-  stopAndActive: function(test){
-    // Must be last test that uses binlog updates since it calls stop()
+  stopAndActive: function(test) {
+    // NOTE: Must be last test that uses binlog updates since it calls stop()
     var table = 'stop_active';
-    server.on('ready', function(conn, esc, escId, queries){
+    server.on('ready', function(conn, esc, escId, queries) {
       querySequence(conn.db, [
         'DROP TABLE IF EXISTS ' + escId(table),
         'CREATE TABLE ' + escId(table) + ' (col INT UNSIGNED)',
@@ -258,24 +197,23 @@ module.exports = {
         conn.select(query, [ {
           table: table,
           database: server.database
-        } ]).on('update', function(rows){
-          if(rows.length > 0 && rows[0].col === 10){
+        } ]).on('update', function(diff, rows) {
+          if(rows.length > 0 && rows[0].col === 10) {
             test.ok(true);
-          }else if(rows.length > 0 && rows[0].col === 15){
+          }else if(rows.length > 0 && rows[0].col === 15) {
             test.ok(this.active());
             this.stop();
             // When all instances of query removed, resultsBuffer removed too
-            // TODO: Update for queryCache
             test.equal(typeof conn._queryCache[query], 'undefined');
 
             test.ok(!this.active());
             conn.db.query('DELETE FROM ' + escId(table));
-            setTimeout(function(){
+            setTimeout(function() {
               test.done();
             }, 100);
+          }else if(rows.length === 0) {
+            throw new Error('Select should have been stopped!');
           }
-        }).on('removed', function(row, index){
-          throw new Error('should not be called');
         });
 
         querySequence(conn.db, [
