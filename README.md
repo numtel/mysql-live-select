@@ -30,7 +30,7 @@ This package has been tested to work in MySQL 5.5.40 and 5.6.19. Expected suppor
 * Create an account with replication privileges:
 
   ```sql
-  GRANT REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'user'@'localhost'
+  GRANT REPLICATION SLAVE, REPLICATION CLIENT, SELECT ON *.* TO 'user'@'localhost'
   ```
 
 ## LiveMysql Constructor
