@@ -1,9 +1,11 @@
 /* mysql-live-select, MIT License ben@latenightsketches.com
    test/index.js - Test Suite */
+var _ = require('lodash');
 var LiveMysql = require('../');
 var settings = require('./settings/mysql');
 var querySequence = require('./helpers/querySequence');
 var Connector = require('./helpers/connector');
+var multipleQueriesData = require('./fixtures/multipleQueries');
 var server = new Connector(settings);
 
 module.exports = {
@@ -148,15 +150,82 @@ module.exports = {
       });
     });
   },
-  pauseAndResume: function(test){
+  // Cases specified in test/fixtures/multipleQueries.js
+  multipleQueries: function(test) {
+    var tablePrefix = 'multiple_queries_';
+    // Milliseconds between each query execution
+    var queryWaitTime = 100;
+    server.on('ready', function(conn, esc, escId, queries) {
+      Object.keys(multipleQueriesData).forEach(function(queryName) {
+        var table = tablePrefix + queryName;
+        var tableEsc = escId(table);
+        var details = multipleQueriesData[queryName];
+
+        var columnDefStr = _.map(details.columns, function(typeStr, name) {
+          return escId(name) + ' ' + typeStr;
+        }).join(', ');
+        var columnList = Object.keys(details.columns);
+        var initDataStr = details.initial.map(function(rowData) {
+          return '(' + columnList.map(function(column) {
+            return esc(rowData[column]);
+          }).join(', ') + ')';
+        }).join(', ');
+        var replaceTable = function(query) {
+          return query.replace(/\$table\$/g, tableEsc);
+        };
+        querySequence(conn.db, [
+          'DROP TABLE IF EXISTS ' + tableEsc,
+          'CREATE TABLE ' + tableEsc + ' (' + columnDefStr + ')',
+          'INSERT INTO ' + tableEsc + ' (' + columnList.map(escId).join(', ') +
+            ') VALUES ' + initDataStr,
+        ], function(results) {
+          var actualDiffs = [];
+          var actualDatas = [];
+          var curQuery = 0;
+          var oldData = [];
+          conn.select(replaceTable(details.select), [ {
+            table: table,
+            database: server.database,
+            condition: details.condition
+          } ]).on('update', function(diff, rows) {
+            actualDiffs.push(diff);
+            actualDatas.push(LiveMysql.applyDiff(oldData, diff));
+
+            oldData = rows;
+
+            if(curQuery < details.queries.length) {
+              setTimeout(function() {
+                querySequence(conn.db,
+                  [ replaceTable(details.queries[curQuery++]) ],
+                  function(results){ /* do nothing with results */ });
+              }, queryWaitTime);
+            }
+
+            if(actualDiffs.length === details.expectedDiffs.length) {
+              test.deepEqual(actualDiffs, details.expectedDiffs,
+                'Diff Mismatch on ' + queryName);
+
+              if(details.expectedDatas) {
+                test.deepEqual(actualDatas, details.expectedDatas,
+                  'Data Mismatch on ' + queryName);
+              }
+              test.done();
+            }
+          });
+
+        });
+      });
+    });
+  },
+  pauseAndResume: function(test) {
     var waitTime = 500;
     var table = 'pause_resume';
-    server.on('ready', function(conn, esc, escId, queries){
+    server.on('ready', function(conn, esc, escId, queries) {
       querySequence(conn.db, [
         'DROP TABLE IF EXISTS ' + escId(table),
         'CREATE TABLE ' + escId(table) + ' (col INT UNSIGNED)',
         'INSERT INTO ' + escId(table) + ' (col) VALUES (10)',
-      ], function(results){
+      ], function(results) {
         var pauseTime = Date.now();
         conn.select('SELECT * FROM ' + escId(table), [ {
           table: table,

@@ -1,9 +1,5 @@
 # mysql-live-select [![Build Status](https://travis-ci.org/numtel/mysql-live-select.svg?branch=master)](https://travis-ci.org/numtel/mysql-live-select)
 
-### :boom: :exclamation: Notice!
-
-This readme is for the updated 1.0 release but has not been included in `numtel:mysql` yet and is not quite ready for use. I have found that the updated diff calculation provides superfluous data for `added` rows. Please wait to update from `0.0.24`. **See [the readme for the current stable version on this page](https://github.com/numtel/mysql-live-select/blob/89691160b7e1fbfde1ae7055980668ceb4182f8a/README.md).**
-
 NPM Package to provide events when a MySQL select statement result set changes.
 
 Built using the [`zongji` Binlog Tailer](https://github.com/nevill/zongji) and [`node-mysql`](https://github.com/felixge/node-mysql) projects.
