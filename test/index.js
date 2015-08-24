@@ -217,6 +217,66 @@ module.exports = {
       });
     });
   },
+  checkConditionWhenQueued: function(test) {
+    var table = 'check_condition_when_queued';
+    server.on('ready', function(conn, esc, escId, queries) {
+      // The following line should make no change but it is here for
+      //  explicitness
+      conn.settings.checkConditionWhenQueued = false;
+
+      querySequence(conn.db, [
+        'DROP TABLE IF EXISTS ' + escId(table),
+        'CREATE TABLE ' + escId(table) + ' (col INT UNSIGNED)',
+        'INSERT INTO ' + escId(table) + ' (col) VALUES (10)',
+      ], function(results) {
+        var conditionCountUnder1000 = 0;
+        var conditionCountOver1000 = 0;
+        conn.select('SELECT * FROM ' + escId(table), [ {
+          table: table,
+          database: server.database,
+          condition: function(row, newRow, rowDeleted) {
+            if(newRow.col < 1000) {
+              // Under 1000, checkConditionWhenQueued is false
+              // Will not bother rechecking the condition when query is
+              //  queued to be refreshed already
+              conditionCountUnder1000++;
+            } else {
+              // Over 1000, checkConditionWhenQueued is true
+              // Condition will be checked with every row that changes
+              conditionCountOver1000++;
+            }
+            return true;
+          }
+        } ]).on('update', function(diff, rows){
+          if(rows.length > 0 && rows[0].col === 2000){
+            conn.settings.checkConditionWhenQueued = false;
+            test.equal(conditionCountUnder1000, 1);
+            test.equal(conditionCountOver1000, 4);
+            test.done();
+          }
+        });
+
+        querySequence(conn.db, [
+          'UPDATE ' + escId(table) + ' SET `col` = `col` + 5',
+          'UPDATE ' + escId(table) + ' SET `col` = `col` + 5',
+          'UPDATE ' + escId(table) + ' SET `col` = `col` + 5',
+          'UPDATE ' + escId(table) + ' SET `col` = 1000',
+        ], function(results){
+          // Should have only had one condition function call at this point
+          conn.settings.checkConditionWhenQueued = true;
+
+          querySequence(conn.db, [
+            'UPDATE ' + escId(table) + ' SET `col` = `col` + 5',
+            'UPDATE ' + escId(table) + ' SET `col` = `col` + 5',
+            'UPDATE ' + escId(table) + ' SET `col` = `col` + 5',
+            'UPDATE ' + escId(table) + ' SET `col` = 2000',
+          ], function(results){
+            // Should have seen all of these updates in condition function
+          });
+        });
+      });
+    });
+  },
   pauseAndResume: function(test) {
     var waitTime = 500;
     var table = 'pause_resume';
