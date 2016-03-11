@@ -43,17 +43,31 @@ The `LiveMysql` constructor makes 3 connections to your MySQL database:
 * Replication slave connection
 * `information_schema` connection for column information
 
+#### Arguments
 
 Argument | Type | Description
 ---------|------|---------------------------
 `settings` | `object` | An object defining the settings. In addition to the [`node-mysql` connection settings](https://github.com/felixge/node-mysql#connection-options), the additional settings below are available.
-`callback` | `function` | Optional callback on connection success/failure. Accepts one argument, `error`.
+`callback` | `function` | **Deprecated:** callback on connection success/failure. Accepts one argument, `error`. See information below about events emitted.
+
+#### Additional Settings
 
 Setting | Type | Description
 --------|------|------------------------------
 `serverId`  | `integer` | [Unique number (1 - 2<sup>32</sup>)](http://dev.mysql.com/doc/refman/5.0/en/replication-options.html#option_mysqld_server-id) to identify this replication slave instance. Must be specified if running more than one instance.<br>**Default:** `1`
 `minInterval` | `integer` | Pass a number of milliseconds to use as the minimum between result set updates. Omit to refresh results on every update. May be changed at runtime.
 `checkConditionWhenQueued` | `boolean` | Set to `true` to call the condition function of a query on every binlog row change event. By default (when undefined or `false`), the condition function will not be called again when a query is already queued to be refreshed. Enabling this can be useful if external caching of row changes.
+
+#### Events Emitted
+
+Use `.on(...)` to handle the following event types.
+
+Event Name | Arguments | Description
+-----------|-----------|---------------
+`error`    | `Error` | An error has occurred.
+`ready`    | *None*  | The database connection is ready.
+
+#### Quick Start
 
 ```javascript
 // Example:

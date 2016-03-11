@@ -355,16 +355,31 @@ module.exports = {
     });
   },
   immediate_disconnection: function(test){
+    var errorOccurred = false;
     // Update serverId setting to prevent collision
     settings.serverId++;
-    var myTest = new LiveMysql(settings, function(error){
+
+    var myTest = new LiveMysql(settings).on('error', function(error){
+      errorOccurred = true;
+    }).on('ready', function() {
       myTest.end();
-      test.ok(typeof error === 'undefined');
+      test.equal(errorOccurred, false);
       settings.serverId--;
       test.done();
     });
   },
   error_invalid_connection: function(test){
+    var myTest = new LiveMysql({
+      host: '127.0.0.1',
+      port: 12345,
+      user: 'not-working',
+      password: 'hahhaha'
+    }).on('error', function(error){
+      test.equal(error.code, 'ECONNREFUSED');
+      test.done();
+    });
+  },
+  error_invalid_connection_callback: function(test){
     var myTest = new LiveMysql({
       host: '127.0.0.1',
       port: 12345,
