@@ -9,7 +9,7 @@ Built using the [`zongji` Binlog Tailer](https://github.com/nevill/zongji) and [
 * [NPM Package for Sails.js connection adapter integration](https://github.com/numtel/sails-mysql-live-select)
 * [Analogous package for PostgreSQL, `pg-live-select`](https://github.com/numtel/pg-live-select)
 
-This package has been tested to work in MySQL 5.5.40 and 5.6.19. Expected support is all MySQL server version >= 5.1.15.
+This package has been tested to work in MySQL 5.1, 5.5, 5.6, and 5.7. Expected support is all MySQL server version >= 5.1.15.
 
 ## Installation
 
@@ -21,15 +21,19 @@ This package has been tested to work in MySQL 5.5.40 and 5.6.19. Expected suppor
 * Enable MySQL binlog in `my.cnf`, restart MySQL server after making the changes.
 
   ```
-  # binlog config
+  # Must be unique integer from 1-2^32
   server-id        = 1
+  # Row format required for ZongJi
   binlog_format    = row
+  # Directory must exist. This path works for Linux. Other OS may require
+  #   different path.
   log_bin          = /var/log/mysql/mysql-bin.log
-  binlog_do_db     = employees   # optional
-  expire_logs_days = 10          # optional
-  max_binlog_size  = 100M        # optional
+
+  binlog_do_db     = employees   # Optional, limit which databases to log
+  expire_logs_days = 10          # Optional, purge old logs
+  max_binlog_size  = 100M        # Optional, limit log size
   ```
-* Create an account with replication privileges:
+* Create an account, then grant replication privileges:
 
   ```sql
   GRANT REPLICATION SLAVE, REPLICATION CLIENT, SELECT ON *.* TO 'user'@'localhost'
