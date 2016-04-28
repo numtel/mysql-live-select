@@ -1,6 +1,6 @@
 {
   "name": "mysql-live-select",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Live updating MySQL SELECT statements",
   "main": "lib/LiveMysql.js",
   "repository": "https://github.com/numtel/mysql-live-select",
@@ -20,7 +20,7 @@
     "lodash": "^4.6.1",
     "md5": "^2.0.0",
     "mysql": "^2.10.2",
-    "zongji": "^0.4.1"
+    "zongji": "^0.4.2"
   },
   "devDependencies": {
     "nodeunit": "^0.9.1"
