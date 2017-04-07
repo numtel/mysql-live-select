@@ -19,7 +19,7 @@
   "dependencies": {
     "lodash": "^4.6.1",
     "md5": "^2.0.0",
-    "mysql": "^2.10.2",
+    "mysql": "^2.13.0",
     "zongji": "^0.4.2"
   },
   "devDependencies": {
